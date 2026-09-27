@@ -60,6 +60,8 @@ import {
 } from './providerRequests';
 import { XaiProbeError } from './xaiErrors';
 import { resolveCodexResetCreditsObservationCount } from './resetCredits';
+import { XAI_WEB_BILLING_REQUEST_BODY, XAI_WEB_BILLING_URL } from './constants';
+import { grpcWebTextBillingBody, pbFixed32Field } from './xaiWebBillingFixtures';
 
 const t = ((key: string) => key) as TFunction;
 
@@ -2931,6 +2933,156 @@ describe('fetchXaiQuota', () => {
         expect.objectContaining({ statusCode: 429 }),
       ])
     );
+  });
+
+  it('adopts the grok.com grpc-web percent when credits JSON has none', async () => {
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_001_000);
+    try {
+      mocks.request
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: {
+            config: {
+              current_period: {
+                type: 'weekly',
+                start: '2027-01-11T00:00:00Z',
+                end: '2027-01-18T00:00:00Z',
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: {},
+        })
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: grpcWebTextBillingBody({
+            startSec: 1_800_000_000,
+            endSec: 1_800_604_800,
+            type: 2,
+          }),
+        });
+
+      const result = await fetchXaiQuota({ name: 'xai.json', type: 'xai', authIndex: 'xai-1' }, t);
+
+      expect(mocks.request).toHaveBeenCalledTimes(3);
+      expect(mocks.request.mock.calls[2][0]).toMatchObject({
+        authIndex: 'xai-1',
+        method: 'POST',
+        url: XAI_WEB_BILLING_URL,
+        data: XAI_WEB_BILLING_REQUEST_BODY,
+        header: expect.objectContaining({
+          Authorization: 'Bearer $TOKEN$',
+          'Content-Type': 'application/grpc-web-text',
+          Accept: 'application/grpc-web-text',
+          'x-grpc-web': '1',
+        }),
+      });
+      expect(mocks.request.mock.calls[2][1]).toMatchObject({ timeout: 8000 });
+      // The credits JSON period stays authoritative; only the percent is adopted.
+      expect(result).toMatchObject({
+        periodType: 'weekly',
+        usagePercent: 0,
+        usagePercentSource: 'grpc-implicit-zero',
+        periodStart: '2027-01-11T00:00:00Z',
+        periodEnd: '2027-01-18T00:00:00Z',
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('keeps weekly usage unavailable when the grpc-web fallback is not eligible', async () => {
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_001_000);
+    try {
+      mocks.request
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: {
+            config: {
+              current_period: {
+                type: 'weekly',
+                start: '2027-01-11T00:00:00Z',
+                end: '2027-01-18T00:00:00Z',
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: {},
+        })
+        .mockResolvedValueOnce({
+          // Malformed protobuf (fixed32 present) -> no eligible percent.
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: grpcWebTextBillingBody({
+            startSec: 1_800_000_000,
+            endSec: 1_800_604_800,
+            type: 2,
+            extraConfigFields: pbFixed32Field(9, 150),
+          }),
+        });
+
+      const result = await fetchXaiQuota({ name: 'xai.json', type: 'xai', authIndex: 'xai-1' }, t);
+
+      expect(mocks.request).toHaveBeenCalledTimes(3);
+      expect(result).toMatchObject({
+        periodType: 'weekly',
+        usagePercent: null,
+        periodStart: '2027-01-11T00:00:00Z',
+      });
+      expect(result.usagePercentSource).toBeUndefined();
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('does not call the grpc-web fallback when credits JSON already has a percent', async () => {
+    mocks.request
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        hasStatusCode: true,
+        header: {},
+        bodyText: '',
+        body: {
+          config: {
+            current_period: { type: 'weekly', start: '2027-01-11T00:00:00Z', end: '2027-01-18T00:00:00Z' },
+            credit_usage_percent: 40,
+          },
+        },
+      })
+      .mockResolvedValue({
+        statusCode: 500,
+        hasStatusCode: true,
+        header: {},
+        bodyText: 'boom',
+        body: null,
+      });
+
+    const result = await fetchXaiQuota({ name: 'xai.json', type: 'xai', authIndex: 'xai-1' }, t);
+
+    expect(mocks.request).toHaveBeenCalledTimes(2);
+    expect(result.usagePercent).toBe(40);
+    expect(result.usagePercentSource).toBeUndefined();
   });
 
   it('preserves the usable weekly summary and marks rateLimited when monthly billing returns 429', async () => {

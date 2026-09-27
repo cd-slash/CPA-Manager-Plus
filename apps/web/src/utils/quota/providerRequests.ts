@@ -57,6 +57,10 @@ import {
   XAI_OFFICIAL_API_BASE_URL,
   XAI_OFFICIAL_API_ME_URL,
   XAI_REQUEST_HEADERS,
+  XAI_WEB_BILLING_REQUEST_BODY,
+  XAI_WEB_BILLING_REQUEST_HEADERS,
+  XAI_WEB_BILLING_TIMEOUT_MS,
+  XAI_WEB_BILLING_URL,
 } from './constants';
 import { parseDevinQuotaPayload } from './devinQuota';
 import { buildAntigravityQuotaGroups, buildKimiQuotaRows } from './builders';
@@ -89,6 +93,7 @@ import {
   resolveCodexResetCreditsObservationCount,
 } from './resetCredits';
 import { classifyXaiProbe, parseXaiErrorEnvelope, XaiProbeError } from './xaiErrors';
+import { parseXaiWebBillingResponse, type XaiWebBillingParseResult } from './xaiWebBilling';
 
 const DEFAULT_ANTIGRAVITY_PROJECT_ID = 'bamboo-precept-lgxtn';
 const CODEX_RESET_CREDITS_REQUEST_TIMEOUT_MS = 8000;
@@ -1927,6 +1932,60 @@ export const probeXaiInference = async (
   return { statusCode: result.statusCode };
 };
 
+const msToIsoTimestamp = (ms: number | null): string | undefined =>
+  typeof ms === 'number' && Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+
+/**
+ * Best-effort grok.com billing fallback for period-only credits answers.
+ * grpc-web-text keeps the exchange ASCII so it survives the api-call proxy;
+ * a percent is adopted only for the validated shapes accepted by the parser.
+ * Single bounded attempt, no retries; any transport failure simply leaves the
+ * summary untouched (the UI then reports weekly usage as unavailable).
+ */
+const requestXaiWebBillingPercent = async (
+  authIndex: string,
+  requestConfig?: AxiosRequestConfig
+): Promise<XaiWebBillingParseResult | null> => {
+  const configuredTimeout = requestConfig?.timeout;
+  const timeout =
+    typeof configuredTimeout === 'number' && configuredTimeout > 0
+      ? Math.min(configuredTimeout, XAI_WEB_BILLING_TIMEOUT_MS)
+      : XAI_WEB_BILLING_TIMEOUT_MS;
+  const result = await apiCallApi.request(
+    {
+      authIndex,
+      method: 'POST',
+      url: XAI_WEB_BILLING_URL,
+      data: XAI_WEB_BILLING_REQUEST_BODY,
+      header: { ...XAI_WEB_BILLING_REQUEST_HEADERS },
+    },
+    { ...(requestConfig ?? {}), timeout }
+  );
+  if (result.hasStatusCode && (result.statusCode < 200 || result.statusCode >= 300)) {
+    return null;
+  }
+  return parseXaiWebBillingResponse(result.body ?? result.bodyText ?? '', Date.now());
+};
+
+/** Credits JSON percent stays authoritative; the grok.com gRPC-web answer is
+ * consulted only when the merged summary carries a period but no percent. */
+const adoptXaiWebBillingPercent = async (
+  summary: XaiBillingSummary,
+  authIndex: string,
+  requestConfig?: AxiosRequestConfig
+): Promise<XaiBillingSummary> => {
+  if (normalizeNumberValue(summary.usagePercent) !== null) return summary;
+  const parse = await requestXaiWebBillingPercent(authIndex, requestConfig).catch(() => null);
+  if (parse === null || parse.outcome !== 'percent') return summary;
+  return {
+    ...summary,
+    usagePercent: parse.usedPercent,
+    usagePercentSource: parse.source,
+    periodStart: summary.periodStart ?? msToIsoTimestamp(parse.periodStartMs),
+    periodEnd: summary.periodEnd ?? msToIsoTimestamp(parse.periodEndMs),
+  };
+};
+
 const requestXaiBillingProbe = async (
   file: AuthFileItem,
   t: TFunction,
@@ -1964,6 +2023,11 @@ const requestXaiBillingProbe = async (
   const rateLimitFailure = weeklyRateLimitFailure ?? monthlyRateLimitFailure;
   const failures = weeklySummary ? [] : weeklyFailure ? [weeklyFailure] : monthlyFailures;
 
+  let summary = mergeXaiBillingSummaries(weeklySummary, monthlySummary);
+  if (summary !== null) {
+    summary = await adoptXaiWebBillingPercent(summary, authIndex, requestConfig);
+  }
+
   return {
     authIndex,
     weeklySummary,
@@ -1971,7 +2035,7 @@ const requestXaiBillingProbe = async (
     failures,
     rateLimitFailure,
     rateLimited: rateLimitFailure !== null,
-    summary: mergeXaiBillingSummaries(weeklySummary, monthlySummary),
+    summary,
     statusCode: weeklyProbe?.statusCode ?? monthlyProbe?.statusCode ?? null,
   };
 };
