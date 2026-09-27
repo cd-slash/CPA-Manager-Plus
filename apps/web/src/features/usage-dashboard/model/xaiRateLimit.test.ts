@@ -28,13 +28,13 @@ describe('parseRateLimitHeaders', () => {
 
 describe('buildXaiRateLimitWindow', () => {
   it('derives used percent from the headers', () => {
-    const window = buildXaiRateLimitWindow('grok-4.5', {
+    const window = buildXaiRateLimitWindow('grok-4.7', {
       'x-ratelimit-limit-tokens': ['1000'],
       'x-ratelimit-remaining-tokens': ['250'],
     });
     expect(window).toEqual({
-      id: 'xai-ratelimit-grok-4.5',
-      label: 'grok-4.5 tokens',
+      id: 'xai-ratelimit-grok-4.7',
+      label: 'grok-4.7 tokens',
       remainingPercent: 25,
       limitTokens: 1000,
       remainingTokens: 250,
@@ -42,7 +42,7 @@ describe('buildXaiRateLimitWindow', () => {
   });
 
   it('clamps used percent to 100', () => {
-    const window = buildXaiRateLimitWindow('grok-4.5', {
+    const window = buildXaiRateLimitWindow('grok-4.7', {
       'x-ratelimit-limit-tokens': ['100'],
       'x-ratelimit-remaining-tokens': ['0'],
     });
@@ -51,13 +51,13 @@ describe('buildXaiRateLimitWindow', () => {
 
   it('returns null without a positive limit', () => {
     expect(
-      buildXaiRateLimitWindow('grok-4.5', {
+      buildXaiRateLimitWindow('grok-4.7', {
         'x-ratelimit-limit-tokens': ['0'],
         'x-ratelimit-remaining-tokens': ['0'],
       })
     ).toBeNull();
     expect(
-      buildXaiRateLimitWindow('grok-4.5', { 'x-ratelimit-remaining-tokens': ['10'] })
+      buildXaiRateLimitWindow('grok-4.7', { 'x-ratelimit-remaining-tokens': ['10'] })
     ).toBeNull();
   });
 });
