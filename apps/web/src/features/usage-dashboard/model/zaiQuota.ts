@@ -1,6 +1,6 @@
 /**
- * Z.AI coding-plan quota, read via the proxied management api-call so the
- * stored credential never leaves the server side.
+ * Z.AI coding-plan quota returned by the authenticated Manager Server probe.
+ * The server-held API key and upstream response body never reach the browser.
  *
  * Payload shape (api.z.ai/api/monitor/usage/quota/limit):
  *   { data: { level: "Pro", limits: [{ unit, number, percentage, nextResetTime }] } }
@@ -8,21 +8,13 @@
  */
 import type { TFunction } from 'i18next';
 import type { AuthFileItem } from '@/types';
-import { apiCallApi, getApiCallErrorMessage } from '@/services/api/apiCall';
 import type { AuthFilesApiRequestScope } from '@/services/api/authFiles';
-import { createScopedApiRequestConfig } from '@/services/api/client';
-import { normalizeAuthIndex } from '@/utils/authIndex';
-
-export const ZAI_QUOTA_URL = 'https://api.z.ai/api/monitor/usage/quota/limit';
-
-const ZAI_TOKEN_HEADER = {
-  Authorization: 'Bearer $TOKEN$',
-} as const;
+import { apiClient, createScopedApiRequestConfig } from '@/services/api/client';
 
 export interface ZaiQuotaWindow {
   id: string;
   label: string;
-  usedPercent: number | null;
+  remainingPercent: number | null;
   resetAtMs: number | null;
   limitWindowSeconds: number | null;
 }
@@ -42,7 +34,9 @@ export const normalizeZaiProvider = (value: unknown): string => {
   return normalized;
 };
 
-export const isZaiAuthFile = (file: Pick<AuthFileItem, 'name'> & Record<string, unknown>): boolean => {
+export const isZaiAuthFile = (
+  file: Pick<AuthFileItem, 'name'> & Record<string, unknown>
+): boolean => {
   const provider = normalizeZaiProvider(file.provider ?? file.type);
   if (provider === 'zai') return true;
   return String(file.name ?? '')
@@ -106,12 +100,12 @@ export const buildZaiQuotaWindows = (payload: unknown, _nowMs = Date.now()): Zai
       {
         id: `zai-${unit ?? 'unknown'}-${number ?? index}`,
         label,
-        usedPercent: percentage,
+        remainingPercent: percentage === null ? null : Math.min(100, Math.max(0, 100 - percentage)),
         resetAtMs,
         limitWindowSeconds,
       },
-    ].filter((window) => window.usedPercent !== null || window.resetAtMs !== null);
-  })
+    ].filter((window) => window.remainingPercent !== null || window.resetAtMs !== null);
+  });
 };
 
 export const parseZaiQuotaPayload = (payload: unknown, nowMs = Date.now()): ZaiQuotaData | null => {
@@ -126,47 +120,16 @@ export const parseZaiQuotaPayload = (payload: unknown, nowMs = Date.now()): ZaiQ
 };
 
 export const fetchZaiQuota = async (
-  file: AuthFileItem,
+  _file: AuthFileItem,
   t: TFunction,
   requestScope?: AuthFilesApiRequestScope
 ): Promise<ZaiQuotaData> => {
-  const authIndex = normalizeAuthIndex(file['auth_index'] ?? file.authIndex);
-  if (!authIndex) {
-    throw new Error(t('usage_dashboard.missing_auth_index'));
-  }
-
-  const result = await apiCallApi.request(
-    {
-      authIndex,
-      method: 'GET',
-      url: ZAI_QUOTA_URL,
-      header: { ...ZAI_TOKEN_HEADER },
-    },
+  const result = await apiClient.get<ZaiQuotaData>(
+    '/usage-dashboard/zai',
     requestScope ? createScopedApiRequestConfig(requestScope) : undefined
   );
-
-  if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw Object.assign(
-      new Error(getApiCallErrorMessage(result) || t('usage_dashboard.quota_error')),
-      { status: result.statusCode }
-    );
-  }
-
-  let body: unknown = result.body;
-  if (body === null || body === undefined) {
-    const text = (result.bodyText ?? '').trim();
-    if (text) {
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = null;
-      }
-    }
-  }
-
-  const parsed = parseZaiQuotaPayload(body);
-  if (!parsed) {
+  if (!result || !Array.isArray(result.windows) || result.windows.length === 0) {
     throw new Error(t('usage_dashboard.no_usage_windows'));
   }
-  return parsed;
+  return result;
 };

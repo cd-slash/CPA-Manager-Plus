@@ -113,6 +113,7 @@ var cpaBuiltinManagementPathHeads = map[string]struct{}{
 	"reload":                    {},
 	"usage":                     {},
 	"usage-statistics-enabled":  {},
+	"usage-dashboard":           {},
 }
 
 func New(managerConfigService *managerconfig.Service, stores ...*store.Store) *Service {

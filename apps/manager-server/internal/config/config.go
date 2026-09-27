@@ -62,6 +62,8 @@ type Config struct {
 	QuotaCooldownEnvSet          bool
 	AccountActionsEnvSet         bool
 	AccountActionsAutoEnvSet     bool
+	ZAIAPIKey                    string
+	XAIProbeModels               []string
 }
 
 type LoadOptions struct {
@@ -202,6 +204,8 @@ func LoadWithOptions(options LoadOptions) (Config, error) {
 		QuotaCooldownEnvSet:       hasEnv("USAGE_QUOTA_COOLDOWN_ENABLED"),
 		AccountActionsEnvSet:      hasEnv("USAGE_ACCOUNT_ACTIONS_ENABLED"),
 		AccountActionsAutoEnvSet:  hasEnv("USAGE_ACCOUNT_ACTIONS_AUTO_DISABLE"),
+		ZAIAPIKey:                 strings.TrimSpace(os.Getenv("CPA_MANAGER_ZAI_API_KEY")),
+		XAIProbeModels:            splitCSV(env("CPA_MANAGER_XAI_PROBE_MODELS", "grok-4.7,grok-4.3")),
 	}, nil
 }
 

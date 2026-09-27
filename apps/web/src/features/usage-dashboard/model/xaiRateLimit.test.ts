@@ -35,7 +35,7 @@ describe('buildXaiRateLimitWindow', () => {
     expect(window).toEqual({
       id: 'xai-ratelimit-grok-4.5',
       label: 'grok-4.5 tokens',
-      usedPercent: 75,
+      remainingPercent: 25,
       limitTokens: 1000,
       remainingTokens: 250,
     });
@@ -46,7 +46,7 @@ describe('buildXaiRateLimitWindow', () => {
       'x-ratelimit-limit-tokens': ['100'],
       'x-ratelimit-remaining-tokens': ['0'],
     });
-    expect(window?.usedPercent).toBe(100);
+    expect(window?.remainingPercent).toBe(0);
   });
 
   it('returns null without a positive limit', () => {

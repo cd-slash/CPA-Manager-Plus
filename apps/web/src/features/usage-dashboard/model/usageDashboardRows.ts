@@ -1,6 +1,6 @@
 /**
  * Usage dashboard view model: provider-grouped account rows with normalized
- * per-window usage rows (label, used %, reset timing) derived from the shared
+ * per-window quota rows (label, remaining %, reset timing) derived from the shared
  * per-provider quota states.
  */
 import type { TFunction } from 'i18next';
@@ -25,7 +25,7 @@ export type UsageAccountStatus = 'disabled' | 'loading' | 'error' | 'ok' | 'pend
 export interface UsageWindowRow {
   key: string;
   label: string;
-  usedPercent: number | null;
+  remainingPercent: number | null;
   resetAtMs: number | null;
 }
 
@@ -60,26 +60,41 @@ const clamp = (value: number): number => Math.min(100, Math.max(0, value));
 const finitePercent = (value: number | null | undefined): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? clamp(value) : null;
 
+const remainingFromUsed = (value: number | null | undefined): number | null => {
+  const used = finitePercent(value);
+  return used === null ? null : 100 - used;
+};
+
 const toRow = (
   key: string,
   label: string,
-  usedPercent: number | null,
+  remainingPercent: number | null,
   resetAtMs: number | null
 ): UsageWindowRow => ({
   key,
   label,
-  usedPercent,
+  remainingPercent,
   resetAtMs: resetAtMs !== null && isValidQuotaResetAtMs(resetAtMs) ? resetAtMs : null,
 });
 
 const claudeRows = (state: ClaudeQuotaState | undefined): UsageWindowRow[] =>
   (state?.windows ?? []).map((window, index) =>
-    toRow(`claude:${window.id}:${index}`, window.label, finitePercent(window.usedPercent), window.resetAtMs ?? null)
+    toRow(
+      `claude:${window.id}:${index}`,
+      window.label,
+      remainingFromUsed(window.usedPercent),
+      window.resetAtMs ?? null
+    )
   );
 
 const codexRows = (state: CodexQuotaState | undefined): UsageWindowRow[] =>
   (state?.windows ?? []).map((window, index) =>
-    toRow(`codex:${window.id}:${index}`, window.label, finitePercent(window.usedPercent), window.resetAtMs ?? null)
+    toRow(
+      `codex:${window.id}:${index}`,
+      window.label,
+      remainingFromUsed(window.usedPercent),
+      window.resetAtMs ?? null
+    )
   );
 
 const devinRows = (state: DevinQuotaState | undefined): UsageWindowRow[] =>
@@ -90,7 +105,7 @@ const devinRows = (state: DevinQuotaState | undefined): UsageWindowRow[] =>
       finitePercent(
         window.remainingPercent === null || window.remainingPercent === undefined
           ? null
-          : 100 - window.remainingPercent
+          : window.remainingPercent
       ),
       window.resetAtMs
     )
@@ -98,16 +113,21 @@ const devinRows = (state: DevinQuotaState | undefined): UsageWindowRow[] =>
 
 const metaRows = (state: MetaQuotaState | undefined): UsageWindowRow[] =>
   (state?.windows ?? []).map((window) =>
-    toRow(`meta:${window.id}`, window.id, finitePercent(window.usedPercent), window.resetAtMs)
+    toRow(`meta:${window.id}`, window.id, remainingFromUsed(window.usedPercent), window.resetAtMs)
   );
 
 const kimiRows = (state: KimiQuotaState | undefined): UsageWindowRow[] =>
   (state?.rows ?? []).map((row) => {
-    const usedPercent =
+    const remainingPercent =
       Number.isFinite(row.limit) && row.limit > 0 && Number.isFinite(row.used)
-        ? clamp((row.used / row.limit) * 100)
+        ? clamp(100 - (row.used / row.limit) * 100)
         : null;
-    return toRow(`kimi:${row.id}`, row.label || row.scope || row.id, usedPercent, row.resetAtMs ?? null);
+    return toRow(
+      `kimi:${row.id}`,
+      row.label || row.scope || row.id,
+      remainingPercent,
+      row.resetAtMs ?? null
+    );
   });
 
 const antigravityRows = (state: AntigravityQuotaState | undefined): UsageWindowRow[] =>
@@ -121,7 +141,7 @@ const antigravityRows = (state: AntigravityQuotaState | undefined): UsageWindowR
       return toRow(
         `antigravity:${group.id}:${bucket.id}`,
         bucket.label,
-        remaining === null ? null : clamp(100 - remaining),
+        remaining,
         Number.isFinite(resetAtMs) ? resetAtMs : null
       );
     })
@@ -138,30 +158,32 @@ const xaiBillingRows = (state: XaiQuotaState | undefined): UsageWindowRow[] => {
       toRow(
         'xai:period',
         billing.periodType === 'unknown' ? 'Usage' : `${billing.periodType} usage`,
-        usagePercent,
+        100 - usagePercent,
         Number.isFinite(periodEndMs) ? periodEndMs : null
       )
     );
   }
   const onDemandPercent = finitePercent(billing.onDemandUsedPercent);
   if (onDemandPercent !== null) {
-    rows.push(toRow('xai:on-demand', 'On-demand', onDemandPercent, null));
+    rows.push(toRow('xai:on-demand', 'On-demand', 100 - onDemandPercent, null));
   }
   billing.productUsage.forEach((product, index) => {
     const percent = finitePercent(product.usagePercent);
     if (percent !== null) {
-      rows.push(toRow(`xai:product:${index}`, product.product, percent, null));
+      rows.push(toRow(`xai:product:${index}`, product.product, 100 - percent, null));
     }
   });
   return rows;
 };
 
 const xaiRateLimitRows = (windows: XaiRateLimitWindow[] | undefined): UsageWindowRow[] =>
-  (windows ?? []).map((window) => toRow(window.id, window.label, finitePercent(window.usedPercent), null));
+  (windows ?? []).map((window) =>
+    toRow(window.id, window.label, finitePercent(window.remainingPercent), null)
+  );
 
 const zaiRows = (windows: ZaiQuotaWindow[] | undefined): UsageWindowRow[] =>
   (windows ?? []).map((window) =>
-    toRow(window.id, window.label, finitePercent(window.usedPercent), window.resetAtMs)
+    toRow(window.id, window.label, finitePercent(window.remainingPercent), window.resetAtMs)
   );
 
 const firstFiniteTimestamp = (...values: Array<number | null | undefined>): number | null => {
@@ -219,9 +241,12 @@ export const PROVIDER_ORDER = [
 ] as const;
 
 export const normalizeProviderKey = (file: AuthFileItem): string => {
-  const raw = String(file.provider ?? file.type ?? 'unknown').trim().toLowerCase();
+  const raw = String(file.provider ?? file.type ?? 'unknown')
+    .trim()
+    .toLowerCase();
   if (raw === 'x-ai' || raw === 'grok') return 'xai';
-  if (['zai', 'z-ai', 'z_ai', 'z.ai', 'zhipu', 'glm', 'zai-coding-plan'].includes(raw)) return 'zai';
+  if (['zai', 'z-ai', 'z_ai', 'z.ai', 'zhipu', 'glm', 'zai-coding-plan'].includes(raw))
+    return 'zai';
   if (raw === 'openai') return 'codex';
   if (raw === 'anthropic') return 'claude';
   return raw || 'unknown';
@@ -337,8 +362,7 @@ export const buildUsageAccountRows = (input: BuildUsageRowsInput): UsageProvider
     const planType =
       provider === 'zai'
         ? readState(input.zai?.planByFile, file, storeKey)
-        : ((snapshot as Partial<CodexQuotaState & ClaudeQuotaState> | undefined)?.planType ??
-          null);
+        : ((snapshot as Partial<CodexQuotaState & ClaudeQuotaState> | undefined)?.planType ?? null);
     const planLabel = input.planLabel(file, planType);
 
     return {

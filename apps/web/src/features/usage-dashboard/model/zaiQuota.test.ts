@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildZaiQuotaWindows, isZaiAuthFile, normalizeZaiProvider, parseZaiQuotaPayload } from './zaiQuota';
+import {
+  buildZaiQuotaWindows,
+  isZaiAuthFile,
+  normalizeZaiProvider,
+  parseZaiQuotaPayload,
+} from './zaiQuota';
 
 const NOW = Date.parse('2026-09-27T12:00:00Z');
 
@@ -48,14 +53,14 @@ describe('buildZaiQuotaWindows', () => {
     expect(windows[0]).toMatchObject({
       id: 'zai-3-5',
       label: '5-hour limit',
-      usedPercent: 42.5,
+      remainingPercent: 57.5,
       resetAtMs: Date.parse('2026-09-27T17:00:00Z'),
       limitWindowSeconds: 5 * 3600,
     });
     expect(windows[1]).toMatchObject({
       id: 'zai-6-1',
       label: 'Weekly limit',
-      usedPercent: 10,
+      remainingPercent: 90,
       limitWindowSeconds: 7 * 24 * 3600,
     });
   });
@@ -63,7 +68,7 @@ describe('buildZaiQuotaWindows', () => {
   it('drops entries without any usable evidence', () => {
     expect(
       buildZaiQuotaWindows({ data: { limits: [{ unit: 9 }, { unit: 3, percentage: 1 }] } }, NOW)
-    ).toEqual([expect.objectContaining({ label: 'Rolling limit', usedPercent: 1 })]);
+    ).toEqual([expect.objectContaining({ label: 'Rolling limit', remainingPercent: 99 })]);
   });
 
   it('returns empty for malformed payloads', () => {

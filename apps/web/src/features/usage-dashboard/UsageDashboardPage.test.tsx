@@ -1,9 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import {
-  act,
-  create,
-  type ReactTestRendererJSON,
-} from 'react-test-renderer';
+import { act, create, type ReactTestRendererJSON } from 'react-test-renderer';
 
 vi.mock('@/services/api/authFiles', () => ({
   authFilesApi: {
@@ -43,10 +39,36 @@ vi.mock('@/services/api/apiCall', () => ({
   getApiCallErrorMessage: () => 'request failed',
 }));
 
+vi.mock('@/services/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api/client')>();
+  return {
+    ...actual,
+    apiClient: {
+      get: vi.fn(async () => ({
+        plan: 'GLM Coding Pro',
+        windows: [
+          {
+            id: 'zai-3',
+            label: '5-hour limit',
+            remainingPercent: 58,
+            resetAtMs: Date.now() + 90 * 60_000,
+          },
+          {
+            id: 'zai-6',
+            label: 'Weekly limit',
+            remainingPercent: 89,
+            resetAtMs: Date.now() + 3 * 24 * 60 * 60_000,
+          },
+        ],
+      })),
+      post: vi.fn(async () => ({ windows: [] })),
+    },
+  };
+});
+
 import { UsageDashboardPage } from './UsageDashboardPage';
 
-const iso = (offsetMinutes: number) =>
-  new Date(Date.now() + offsetMinutes * 60_000).toISOString();
+const iso = (offsetMinutes: number) => new Date(Date.now() + offsetMinutes * 60_000).toISOString();
 
 interface RenderTextNode {
   type: '#text';
@@ -64,15 +86,19 @@ const collectText = (node: unknown): string[] => {
   if (typeof node === 'string') return [node];
   if (isTextNode(node)) return [node.value];
   if (Array.isArray(node)) return node.flatMap((child) => collectText(child));
-  if (typeof node === 'object' && node !== null && Array.isArray((node as { children?: unknown }).children)) {
-    return ((node as { children: unknown[] }).children).flatMap((child) => collectText(child));
+  if (
+    typeof node === 'object' &&
+    node !== null &&
+    Array.isArray((node as { children?: unknown }).children)
+  ) {
+    return (node as { children: unknown[] }).children.flatMap((child) => collectText(child));
   }
   return [];
 };
 
-const toJson = (instance: { toJSON: () => ReactTestRendererJSON | ReactTestRendererJSON[] | null }):
-  | ReactTestRendererJSON
-  | ReactTestRendererJSON[] =>
+const toJson = (instance: {
+  toJSON: () => ReactTestRendererJSON | ReactTestRendererJSON[] | null;
+}): ReactTestRendererJSON | ReactTestRendererJSON[] =>
   (instance.toJSON() ?? []) as ReactTestRendererJSON | ReactTestRendererJSON[];
 
 describe('UsageDashboardPage', () => {
@@ -122,12 +148,12 @@ describe('UsageDashboardPage', () => {
     const trees = Array.isArray(rendered) ? rendered : [rendered];
     const texts = trees.flatMap((tree) => collectText(tree));
     expect(texts).toContain('claude-t\u2022\u2022\u2022@f\u2022\u2022\u2022.dev.json');
-    expect(texts).toContain('zai-c\u2022\u2022\u2022.json');
+    expect(texts).toContain('c\u2022\u2022\u2022.yaml');
     expect(texts).toContain('codex-t\u2022\u2022\u2022.json');
     expect(texts).toContain('5-hour limit');
     expect(texts).toContain('Weekly limit');
-    expect(texts).toContain('41%');
-    expect(texts).toContain('42%');
+    expect(texts.join('')).toContain('59% remaining');
+    expect(texts.join('')).toContain('58% remaining');
     // Codex upstream returns 404 -> visible error state, group still renders.
     expect(texts).toContain('Error');
     renderer!.unmount();

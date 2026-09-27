@@ -10,7 +10,10 @@ import {
   type UsageWindowRow,
 } from './model/usageDashboardRows';
 import { planLabelForFile, useUsageDashboard } from './hooks/useUsageDashboard';
-import { formatQuotaResetDisplay, getQuotaResetRemainingDuration } from '@/features/accounts/model/accountsPagePresentation';
+import {
+  formatQuotaResetDisplay,
+  getQuotaResetRemainingDuration,
+} from '@/features/accounts/model/accountsPagePresentation';
 import styles from './UsageDashboardPage.module.scss';
 
 const PROVIDER_LABEL_KEYS: Record<string, string> = {
@@ -51,18 +54,21 @@ interface WindowBarProps {
 
 function WindowBar({ window: usageWindow, nowMs }: WindowBarProps) {
   const { t, i18n } = useTranslation();
-  const used = usageWindow.usedPercent;
-  const width = used === null ? 0 : Math.min(100, Math.max(0, used));
+  const remainingPercent = usageWindow.remainingPercent;
+  const width = remainingPercent === null ? 0 : Math.min(100, Math.max(0, remainingPercent));
   const barClass =
-    used === null
+    remainingPercent === null
       ? styles.barNeutral
-      : used >= 90
+      : remainingPercent <= 10
         ? styles.barHigh
-        : used >= 70
+        : remainingPercent <= 30
           ? styles.barMid
           : styles.barLow;
-  const remaining = formatRemaining(usageWindow.resetAtMs, nowMs);
-  const resetDisplay = formatQuotaResetDisplay(usageWindow.resetAtMs, '-', i18n.language);
+  const remaining = remainingPercent === 100 ? null : formatRemaining(usageWindow.resetAtMs, nowMs);
+  const resetDisplay =
+    remainingPercent === 100
+      ? '-'
+      : formatQuotaResetDisplay(usageWindow.resetAtMs, '-', i18n.language);
 
   return (
     <div className={styles.window} data-usage-window={usageWindow.key}>
@@ -70,14 +76,16 @@ function WindowBar({ window: usageWindow, nowMs }: WindowBarProps) {
         <span className={styles.windowLabel} title={usageWindow.label}>
           {usageWindow.label}
         </span>
-        <span className={styles.windowPercent}>{formatPercentValue(used)}</span>
+        <span className={styles.windowPercent}>
+          {formatPercentValue(remainingPercent)} {t('usage_dashboard.remaining')}
+        </span>
       </div>
       <div
         className={styles.track}
         role="meter"
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={used === null ? undefined : Math.round(used)}
+        aria-valuenow={remainingPercent === null ? undefined : Math.round(remainingPercent)}
         aria-label={usageWindow.label}
       >
         <div className={`${styles.bar} ${barClass}`} style={{ width: `${width}%` }} />
@@ -115,13 +123,20 @@ function AccountRow({ account, nowMs }: AccountRowProps) {
             : 'status_pending';
 
   return (
-    <article className={styles.row} data-usage-account={account.key} data-provider={account.provider}>
+    <article
+      className={styles.row}
+      data-usage-account={account.key}
+      data-provider={account.provider}
+    >
       <div className={styles.rowHead}>
         <span className={styles.rowName} title={account.maskedName}>
           {account.maskedName}
         </span>
         {account.planLabel ? <span className={styles.planChip}>{account.planLabel}</span> : null}
-        <span className={`${styles.statusChip} ${styles[account.status]}`} data-usage-status={account.status}>
+        <span
+          className={`${styles.statusChip} ${styles[account.status]}`}
+          data-usage-status={account.status}
+        >
           {t(`usage_dashboard.${statusKey}`)}
         </span>
         {account.status === 'error' && account.statusDetail ? (
@@ -190,8 +205,7 @@ export function UsageDashboardPage() {
     [dashboard.files, dashboard.quotaStates, dashboard.zai, dashboard.xaiRateLimits, t]
   );
 
-  const isEmpty =
-    !dashboard.loading && !dashboard.error && groups.length === 0;
+  const isEmpty = !dashboard.loading && !dashboard.error && groups.length === 0;
 
   return (
     <div className={styles.page} data-usage-dashboard-page="true">

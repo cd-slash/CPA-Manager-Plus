@@ -5357,6 +5357,7 @@
     "no_usage_windows": "No usage windows",
     "missing_auth_index": "Credential index unavailable",
     "quota_error": "Quota request failed",
+    "remaining": "remaining",
     "status_ok": "OK",
     "status_disabled": "Disabled",
     "status_error": "Error",

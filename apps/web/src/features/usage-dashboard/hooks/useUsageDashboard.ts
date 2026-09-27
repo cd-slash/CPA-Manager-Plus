@@ -112,7 +112,9 @@ export const useUsageDashboard = (t: TFunction): UsageDashboardState => {
         const response = await authFilesApi.list();
         if (!isCurrent()) return;
         const listed = Array.isArray(response?.files) ? response.files : [];
-        setFiles(listed);
+        const zaiSource: AuthFileItem = { name: 'config.yaml', provider: 'zai', id: 'zai-config' };
+        const dashboardFiles = [...listed.filter((file) => !isZaiAuthFile(file)), zaiSource];
+        setFiles(dashboardFiles);
         setError(null);
         setLastRefreshedAtMs(Date.now());
 
@@ -198,10 +200,7 @@ export const useUsageDashboard = (t: TFunction): UsageDashboardState => {
           }
         };
 
-        const zaiFiles = [
-          ...(byProvider.get('zai') ?? []),
-          ...listed.filter((file) => !byProvider.has(normalizeProviderKey(file)) && isZaiAuthFile(file)),
-        ].filter((file, index, all) => all.findIndex((other) => other.name === file.name) === index);
+        const zaiFiles = [zaiSource];
 
         await Promise.all([
           runProviderRefresh('claude', (file) =>
@@ -276,7 +275,17 @@ export const useUsageDashboard = (t: TFunction): UsageDashboardState => {
     return () => {
       cancelled = true;
     };
-  }, [refreshTick, t, setAntigravityQuota, setClaudeQuota, setCodexQuota, setDevinQuota, setKimiQuota, setMetaQuota, setXaiQuota]);
+  }, [
+    refreshTick,
+    t,
+    setAntigravityQuota,
+    setClaudeQuota,
+    setCodexQuota,
+    setDevinQuota,
+    setKimiQuota,
+    setMetaQuota,
+    setXaiQuota,
+  ]);
 
   // Periodic re-fetch.
   useInterval(() => {

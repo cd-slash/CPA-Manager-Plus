@@ -5356,6 +5356,7 @@
     "no_usage_windows": "Нет окон использования",
     "missing_auth_index": "Индекс учётных данных недоступен",
     "quota_error": "Ошибка запроса квоты",
+    "remaining": "осталось",
     "status_ok": "OK",
     "status_disabled": "Отключено",
     "status_error": "Ошибка",

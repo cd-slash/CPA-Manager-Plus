@@ -24,6 +24,7 @@ import (
 	modelpricesvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/modelprice"
 	monitoringsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/monitoring"
 	panelsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/panel"
+	providerusagesvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/providerusage"
 	proxysvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/proxy"
 	quotasnapshotsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/quotasnapshot"
 	setupsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/setup"
@@ -66,6 +67,7 @@ type Context struct {
 	AuthFileMutationCoordinator    *cpaauthfiles.MutationCoordinator
 	ProxyService                   *proxysvc.Service
 	PanelService                   *panelsvc.Service
+	ProviderUsageService           *providerusagesvc.Service
 	AutomationRuntimeService       AutomationRuntimeService
 	DatabaseMaintenance            DatabaseMaintenanceStatusProvider
 }
@@ -194,6 +196,7 @@ func fromExisting(
 			st,
 		),
 		PanelService:             panelsvc.New(cfg.PanelPath, embeddedPanel),
+		ProviderUsageService:     providerusagesvc.New(managerConfigService, cfg.ZAIAPIKey, cfg.XAIProbeModels),
 		AutomationRuntimeService: runtimeService,
 	}
 }

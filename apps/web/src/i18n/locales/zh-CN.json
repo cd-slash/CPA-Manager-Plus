@@ -5352,6 +5352,7 @@
     "no_usage_windows": "暂无用量窗口",
     "missing_auth_index": "凭证索引不可用",
     "quota_error": "配额请求失败",
+    "remaining": "剩余",
     "status_ok": "正常",
     "status_disabled": "已停用",
     "status_error": "错误",
