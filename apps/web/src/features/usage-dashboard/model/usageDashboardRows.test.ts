@@ -128,7 +128,7 @@ describe('buildUsageAccountRows', () => {
   it('merges xAI billing and per-model rate-limit windows', () => {
     const rateLimitWindow: XaiRateLimitWindow = {
       id: 'xai-ratelimit-grok-4.7',
-      label: 'grok-4.7 tokens',
+      label: 'grok-4.7 token rate limit',
       remainingPercent: 88,
       limitTokens: 1000,
       remainingTokens: 880,
@@ -163,7 +163,10 @@ describe('buildUsageAccountRows', () => {
       planLabel: () => null,
     });
     const windows = groups[0].accounts[0].windows;
-    expect(windows.map((window) => window.label)).toEqual(['weekly usage', 'grok-4.7 tokens']);
+    expect(windows.map((window) => window.label)).toEqual([
+      'weekly usage',
+      'grok-4.7 token rate limit',
+    ]);
     expect(windows[0].remainingPercent).toBe(45);
   });
 

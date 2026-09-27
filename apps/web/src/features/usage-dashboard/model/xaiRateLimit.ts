@@ -61,7 +61,7 @@ export const buildXaiRateLimitWindow = (
   const remainingPercent = Math.min(100, Math.max(0, (remainingTokens / limitTokens) * 100));
   return {
     id: `xai-ratelimit-${model}`,
-    label: `${model} tokens`,
+    label: `${model} token rate limit`,
     remainingPercent: Math.round(remainingPercent * 10) / 10,
     limitTokens,
     remainingTokens,

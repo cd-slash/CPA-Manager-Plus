@@ -76,7 +76,7 @@ func TestXAIUsesFixedOriginAndKeepsSuccessfulModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calls != 2 || len(result.Windows) != 1 || result.Windows[0].Label != "grok-4.3 tokens" || *result.Windows[0].RemainingPercent != 25 {
+	if calls != 2 || len(result.Windows) != 1 || result.Windows[0].Label != "grok-4.3 token rate limit" || *result.Windows[0].RemainingPercent != 25 {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 }
