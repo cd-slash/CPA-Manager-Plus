@@ -594,6 +594,13 @@ export interface XaiOfficialApiHealth {
 export interface XaiBillingSummary {
   periodType: XaiBillingPeriodType;
   usagePercent: number | null;
+  /**
+   * Where usagePercent came from. Undefined means the credits JSON published
+   * it; `grpc-wire` is a float read off the grok.com billing protobuf;
+   * `grpc-implicit-zero` is the validated no-usage-yet zero (complete active
+   * weekly/monthly period, no fixed32 field anywhere).
+   */
+  usagePercentSource?: 'grpc-wire' | 'grpc-implicit-zero';
   periodStart?: string;
   periodEnd?: string;
   productUsage: XaiProductUsageSummary[];

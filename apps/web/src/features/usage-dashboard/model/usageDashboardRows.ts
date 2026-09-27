@@ -27,6 +27,12 @@ export interface UsageWindowRow {
   label: string;
   remainingPercent: number | null;
   resetAtMs: number | null;
+  /**
+   * The provider answered but published no usage percent for this window
+   * (e.g. SuperGrok weekly credits report period bounds only). Rendered as an
+   * explicit unavailable state: never as an invented 0% or 100%.
+   */
+  unavailable?: boolean;
 }
 
 export interface UsageAccountRow {
@@ -152,16 +158,30 @@ const xaiBillingRows = (state: XaiQuotaState | undefined): UsageWindowRow[] => {
   if (!billing) return [];
   const rows: UsageWindowRow[] = [];
   const usagePercent = finitePercent(billing.usagePercent);
+  const periodEndMs = billing.periodEnd ? Date.parse(billing.periodEnd) : NaN;
+  const periodLabel = billing.periodType === 'unknown' ? 'Usage' : `${billing.periodType} usage`;
   if (usagePercent !== null) {
-    const periodEndMs = billing.periodEnd ? Date.parse(billing.periodEnd) : NaN;
     rows.push(
       toRow(
         'xai:period',
-        billing.periodType === 'unknown' ? 'Usage' : `${billing.periodType} usage`,
+        periodLabel,
         100 - usagePercent,
         Number.isFinite(periodEndMs) ? periodEndMs : null
       )
     );
+  } else {
+    // Provider-reported period without a wire usage percent: surface an
+    // explicit unavailable state. Never substitute 0% or 100%, and never
+    // fabricate a reset that the provider did not report.
+    rows.push({
+      ...toRow(
+        'xai:period-unavailable',
+        periodLabel,
+        null,
+        Number.isFinite(periodEndMs) ? periodEndMs : null
+      ),
+      unavailable: true,
+    });
   }
   const onDemandPercent = finitePercent(billing.onDemandUsedPercent);
   if (onDemandPercent !== null) {

@@ -231,6 +231,12 @@
   color: var(--text-primary);
 }
 
+.windowUnavailable {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-tertiary, #94a3b8);
+}
+
 .track {
   height: 6px;
   border-radius: var(--radius-full, 9999px);

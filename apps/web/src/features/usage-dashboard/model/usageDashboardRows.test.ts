@@ -170,6 +170,91 @@ describe('buildUsageAccountRows', () => {
     expect(windows[0].remainingPercent).toBe(45);
   });
 
+  it('marks a period-only xAI billing answer as unavailable instead of inventing a percent', () => {
+    const periodEnd = '2026-10-04T08:20:14Z';
+    const rateLimitWindow: XaiRateLimitWindow = {
+      id: 'xai-ratelimit-grok-4.7',
+      label: 'grok-4.7 token rate limit',
+      remainingPercent: 100,
+      limitTokens: 1000,
+      remainingTokens: 1000,
+    };
+    const groups = buildUsageAccountRows({
+      files: [{ name: 'xai-g.json', provider: 'xai' }],
+      claudeQuota: {},
+      codexQuota: {},
+      antigravityQuota: {},
+      kimiQuota: {},
+      devinQuota: {},
+      metaQuota: {},
+      xaiQuota: {
+        'xai-g.json': xaiState({
+          periodType: 'weekly',
+          usagePercent: null,
+          periodStart: '2026-09-27T08:20:14Z',
+          periodEnd,
+          productUsage: [],
+          monthlyLimitCents: null,
+          usedCents: null,
+          includedUsedCents: null,
+          onDemandCapCents: 0,
+          onDemandUsedCents: 0,
+          onDemandUsedPercent: null,
+          usedPercent: null,
+        }),
+      },
+      xaiRateLimits: {
+        windowsByFile: { 'xai-g.json': [rateLimitWindow] },
+        statusByFile: { 'xai-g.json': 'success' },
+      },
+      t,
+      planLabel: () => null,
+    });
+    const windows = groups[0].accounts[0].windows;
+    expect(windows.map((window) => window.key)).toEqual([
+      'xai:period-unavailable',
+      'xai-ratelimit-grok-4.7',
+    ]);
+    expect(windows[0].label).toBe('weekly usage');
+    expect(windows[0].unavailable).toBe(true);
+    expect(windows[0].remainingPercent).toBeNull();
+    expect(windows[0].resetAtMs).toBe(Date.parse(periodEnd));
+    // The token rate limit stays a distinct window and is never a subscription proxy.
+    expect(windows[1].unavailable).toBeUndefined();
+    expect(windows[1].remainingPercent).toBe(100);
+    expect(groups[0].accounts[0].status).toBe('ok');
+  });
+
+  it('emits no unavailable xAI window when billing has no data', () => {
+    const rateLimitWindow: XaiRateLimitWindow = {
+      id: 'xai-ratelimit-grok-4.7',
+      label: 'grok-4.7 token rate limit',
+      remainingPercent: 72,
+      limitTokens: 1000,
+      remainingTokens: 720,
+    };
+    const groups = buildUsageAccountRows({
+      files: [{ name: 'xai-h.json', provider: 'xai' }],
+      claudeQuota: {},
+      codexQuota: {},
+      antigravityQuota: {},
+      kimiQuota: {},
+      devinQuota: {},
+      metaQuota: {},
+      xaiQuota: {
+        'xai-h.json': xaiState(null),
+      },
+      xaiRateLimits: {
+        windowsByFile: { 'xai-h.json': [rateLimitWindow] },
+        statusByFile: { 'xai-h.json': 'success' },
+      },
+      t,
+      planLabel: () => null,
+    });
+    const windows = groups[0].accounts[0].windows;
+    expect(windows.map((window) => window.key)).toEqual(['xai-ratelimit-grok-4.7']);
+  });
+
   it('renders zai windows and plan for zai auth files', () => {
     const groups = buildUsageAccountRows({
       files: [{ name: 'zai-plan.json', provider: 'zai' }],

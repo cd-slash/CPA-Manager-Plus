@@ -55,6 +55,7 @@ interface WindowBarProps {
 function WindowBar({ window: usageWindow, nowMs }: WindowBarProps) {
   const { t, i18n } = useTranslation();
   const remainingPercent = usageWindow.remainingPercent;
+  const unavailable = usageWindow.unavailable === true && remainingPercent === null;
   const width = remainingPercent === null ? 0 : Math.min(100, Math.max(0, remainingPercent));
   const barClass =
     remainingPercent === null
@@ -71,25 +72,35 @@ function WindowBar({ window: usageWindow, nowMs }: WindowBarProps) {
       : formatQuotaResetDisplay(usageWindow.resetAtMs, '-', i18n.language);
 
   return (
-    <div className={styles.window} data-usage-window={usageWindow.key}>
+    <div
+      className={styles.window}
+      data-usage-window={usageWindow.key}
+      data-usage-unavailable={unavailable ? 'true' : undefined}
+    >
       <div className={styles.windowMeta}>
         <span className={styles.windowLabel} title={usageWindow.label}>
           {usageWindow.label}
         </span>
-        <span className={styles.windowPercent}>
-          {formatPercentValue(remainingPercent)} {t('usage_dashboard.remaining')}
-        </span>
+        {unavailable ? (
+          <span className={styles.windowUnavailable}>{t('usage_dashboard.unavailable')}</span>
+        ) : (
+          <span className={styles.windowPercent}>
+            {formatPercentValue(remainingPercent)} {t('usage_dashboard.remaining')}
+          </span>
+        )}
       </div>
-      <div
-        className={styles.track}
-        role="meter"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={remainingPercent === null ? undefined : Math.round(remainingPercent)}
-        aria-label={usageWindow.label}
-      >
-        <div className={`${styles.bar} ${barClass}`} style={{ width: `${width}%` }} />
-      </div>
+      {!unavailable ? (
+        <div
+          className={styles.track}
+          role="meter"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={remainingPercent === null ? undefined : Math.round(remainingPercent)}
+          aria-label={usageWindow.label}
+        >
+          <div className={`${styles.bar} ${barClass}`} style={{ width: `${width}%` }} />
+        </div>
+      ) : null}
       <div className={styles.windowReset}>
         {resetDisplay !== '-' ? <span>{resetDisplay}</span> : null}
         {remaining ? (

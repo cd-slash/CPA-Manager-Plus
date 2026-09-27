@@ -5373,6 +5373,7 @@
     "provider_gemini": "Gemini",
     "provider_qwen": "Qwen",
     "provider_iflow": "iFlow",
-    "provider_vertex": "Vertex"
+    "provider_vertex": "Vertex",
+    "unavailable": "無法取得"
   }
 }

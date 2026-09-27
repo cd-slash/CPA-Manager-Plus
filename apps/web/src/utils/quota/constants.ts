@@ -206,6 +206,19 @@ export const KIMI_REQUEST_HEADERS = {
 // xAI/Grok API configuration
 export const XAI_BILLING_WEEKLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits';
 export const XAI_BILLING_MONTHLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing';
+// grok.com billing gRPC endpoint probed as grpc-web-text so the base64 frames
+// survive the management api-call JSON transport (raw binary would be mangled).
+export const XAI_WEB_BILLING_URL =
+  'https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig';
+// gRPC-web frame for GetGrokCreditsConfigRequest { exclude_legacy_monthly_usage: false }.
+export const XAI_WEB_BILLING_REQUEST_BODY = 'AAAAAAIIAA==';
+export const XAI_WEB_BILLING_TIMEOUT_MS = 8000;
+export const XAI_WEB_BILLING_REQUEST_HEADERS = {
+  Authorization: 'Bearer $TOKEN$',
+  'Content-Type': 'application/grpc-web-text',
+  Accept: 'application/grpc-web-text',
+  'x-grpc-web': '1',
+};
 export const XAI_OFFICIAL_API_ME_URL = 'https://api.x.ai/v1/me';
 export const XAI_OFFICIAL_API_BASE_URL = 'https://api.x.ai/v1';
 export const XAI_CLI_CHAT_PROXY_BASE_URL = 'https://cli-chat-proxy.grok.com/v1';
