@@ -65,11 +65,10 @@ function WindowBar({ window: usageWindow, nowMs }: WindowBarProps) {
         : remainingPercent <= 30
           ? styles.barMid
           : styles.barLow;
-  const remaining = remainingPercent === 100 ? null : formatRemaining(usageWindow.resetAtMs, nowMs);
-  const resetDisplay =
-    remainingPercent === 100
-      ? '-'
-      : formatQuotaResetDisplay(usageWindow.resetAtMs, '-', i18n.language);
+  // Provider-reported reset renders for every known resetAtMs, including
+  // windows at 100% remaining; unknown resets render neither date nor countdown.
+  const remaining = formatRemaining(usageWindow.resetAtMs, nowMs);
+  const resetDisplay = formatQuotaResetDisplay(usageWindow.resetAtMs, '-', i18n.language);
 
   return (
     <div
