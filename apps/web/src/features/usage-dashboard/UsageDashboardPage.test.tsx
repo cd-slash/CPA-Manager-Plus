@@ -123,6 +123,25 @@ const findProviderTree = (
   return undefined;
 };
 
+const findWindowNode = (
+  nodes: ReactTestRendererJSON[],
+  windowKey: string
+): ReactTestRendererJSON | undefined => {
+  for (const node of nodes) {
+    const props =
+      typeof node.props === 'object' && node.props !== null
+        ? (node.props as Record<string, unknown>)
+        : undefined;
+    if (props?.['data-usage-window'] === windowKey) return node;
+    const children = Array.isArray(node.children)
+      ? (node.children.filter((child) => typeof child === 'object') as ReactTestRendererJSON[])
+      : [];
+    const match = findWindowNode(children, windowKey);
+    if (match) return match;
+  }
+  return undefined;
+};
+
 describe('UsageDashboardPage', () => {
   beforeEach(() => {
     xaiRateLimitWindows = [];
@@ -217,6 +236,63 @@ describe('UsageDashboardPage', () => {
     expect(texts.join('')).toContain('100% remaining');
     // Rate-limit headers carry no 5h/weekly reset clock: no countdown may render.
     expect(texts.join('')).not.toMatch(/in \d+[dhm]/);
+    renderer!.unmount();
+  });
+
+  it('shows the provider reset for 100%-remaining windows only when the reset is known', async () => {
+    // Weekly billing reports 0% used (100% remaining) plus a known period end.
+    apiCallResponses.set('https://cli-chat-proxy.grok.com/v1/billing?format=credits', [
+      200,
+      JSON.stringify({
+        config: {
+          creditUsagePercent: 0,
+          currentPeriod: {
+            type: 'USAGE_PERIOD_TYPE_WEEKLY',
+            start: new Date(Date.now() - 24 * 60 * 60_000).toISOString(),
+            end: new Date(Date.now() + 6 * 24 * 60 * 60_000 + 30 * 60_000).toISOString(),
+          },
+          onDemandCap: { val: 0 },
+          onDemandUsed: { val: 0 },
+        },
+      }),
+    ]);
+    // Token rate limit reports 100% remaining but no reset period.
+    xaiRateLimitWindows = [
+      {
+        id: 'xai-ratelimit-grok-4.3',
+        label: 'grok-4.3 token rate limit',
+        remainingPercent: 100,
+        limitTokens: 100000,
+        remainingTokens: 100000,
+      },
+    ];
+
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(async () => {
+      renderer = create(<UsageDashboardPage />);
+    });
+    await flush();
+
+    const rendered = toJson(renderer!);
+    const trees = Array.isArray(rendered) ? rendered : [rendered];
+    const xaiTree = findProviderTree(trees, 'xai');
+    expect(xaiTree).toBeDefined();
+
+    const weeklyWindow = findWindowNode([xaiTree!], 'xai:period');
+    expect(weeklyWindow).toBeDefined();
+    const weeklyText = collectText(weeklyWindow).join('');
+    expect(weeklyText).toContain('100% remaining');
+    // Known provider reset: period-end date and countdown render at 100%.
+    expect(weeklyText).toMatch(/\d{2}\/\d{2} \d{2}:\d{2}/);
+    expect(weeklyText).toContain('in 6d');
+
+    const rateLimitWindow = findWindowNode([xaiTree!], 'xai-ratelimit-grok-4.3');
+    expect(rateLimitWindow).toBeDefined();
+    const rateLimitText = collectText(rateLimitWindow).join('');
+    expect(rateLimitText).toContain('100% remaining');
+    // Unknown reset: neither date nor countdown may render.
+    expect(rateLimitText).not.toMatch(/\d{2}\/\d{2} \d{2}:\d{2}/);
+    expect(rateLimitText).not.toMatch(/in \d+[dhm]/);
     renderer!.unmount();
   });
 
