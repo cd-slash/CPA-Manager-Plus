@@ -130,7 +130,7 @@ func (s *Service) XAI(ctx context.Context, authIndex string) (XAIResult, error) 
 	windows := make([]Window, 0, len(s.xaiModels))
 	for _, model := range s.xaiModels {
 		requestData, _ := json.Marshal(map[string]any{"model": model, "messages": []map[string]string{{"role": "user", "content": "ping"}}, "max_tokens": 1})
-		payload, _ := json.Marshal(map[string]any{"authIndex": authIndex, "method": http.MethodPost, "url": xaiCompletionsURL, "header": map[string]string{"Authorization": "Bearer $TOKEN$"}, "data": string(requestData)})
+		payload, _ := json.Marshal(map[string]any{"authIndex": authIndex, "method": http.MethodPost, "url": xaiCompletionsURL, "header": map[string]string{"Authorization": "Bearer $TOKEN$", "Content-Type": "application/json"}, "data": string(requestData)})
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(setup.CPAUpstreamURL, "/")+"/v0/management/api-call", bytes.NewReader(payload))
 		if reqErr != nil {
 			continue
