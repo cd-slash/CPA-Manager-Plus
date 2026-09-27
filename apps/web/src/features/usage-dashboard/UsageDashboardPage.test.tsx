@@ -219,4 +219,69 @@ describe('UsageDashboardPage', () => {
     expect(texts.join('')).not.toMatch(/in \d+[dhm]/);
     renderer!.unmount();
   });
+
+  it('renders xAI weekly usage as unavailable when the provider publishes no percent', async () => {
+    apiCallResponses.set('https://cli-chat-proxy.grok.com/v1/billing?format=credits', [
+      200,
+      JSON.stringify({
+        config: {
+          currentPeriod: {
+            type: 'USAGE_PERIOD_TYPE_WEEKLY',
+            start: new Date(Date.now() - 24 * 60 * 60_000).toISOString(),
+            end: new Date(Date.now() + 6 * 24 * 60 * 60_000).toISOString(),
+          },
+          onDemandCap: { val: 0 },
+          onDemandUsed: { val: 0 },
+        },
+      }),
+    ]);
+    xaiRateLimitWindows = [
+      {
+        id: 'xai-ratelimit-grok-4.7',
+        label: 'grok-4.7 token rate limit',
+        remainingPercent: 72,
+        limitTokens: 100000,
+        remainingTokens: 72000,
+      },
+    ];
+
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(async () => {
+      renderer = create(<UsageDashboardPage />);
+    });
+    await flush();
+
+    const rendered = toJson(renderer!);
+    const trees = Array.isArray(rendered) ? rendered : [rendered];
+    const xaiTree = findProviderTree(trees, 'xai');
+    expect(xaiTree).toBeDefined();
+    const texts = collectText(xaiTree);
+    expect(texts).toContain('weekly usage');
+    expect(texts).toContain('Unavailable');
+    expect(texts).toContain('grok-4.7 token rate limit');
+    // Exactly one percent readout: the token rate limit, never a weekly proxy.
+    expect(texts.join('').match(/% remaining/g)).toHaveLength(1);
+    // The unavailable window renders no meter bar.
+    const unavailableNodes: ReactTestRendererJSON[] = [];
+    const walk = (node: ReactTestRendererJSON): void => {
+      const props =
+        typeof node.props === 'object' && node.props !== null
+          ? (node.props as Record<string, unknown>)
+          : undefined;
+      if (props?.['data-usage-unavailable'] === 'true') unavailableNodes.push(node);
+      for (const child of node.children ?? []) {
+        if (typeof child === 'object') walk(child);
+      }
+    };
+    (Array.isArray(rendered) ? rendered : [rendered]).forEach(walk);
+    expect(unavailableNodes).toHaveLength(1);
+    expect(
+      unavailableNodes[0].children?.some(
+        (child) =>
+          typeof child === 'object' &&
+          (child as { props?: { className?: string } }).props?.className?.includes('track')
+      )
+    ).toBe(false);
+    renderer!.unmount();
+  });
 });
