@@ -5,6 +5,8 @@
   flex-direction: column;
   gap: 16px;
   padding: 4px 0 24px;
+  container: usage-dashboard-page / inline-size;
+  min-width: 0;
 }
 
 .header {
@@ -57,9 +59,11 @@
 }
 
 .groups {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 20px;
+  min-width: 0;
 }
 
 .group {
@@ -68,6 +72,7 @@
   border: 1px solid var(--glass-border, var(--border-color));
   border-radius: var(--app-radius-md, 12px);
   padding: 16px 18px;
+  min-width: 0;
 }
 
 .groupTitle {
@@ -279,6 +284,18 @@
 
 .windowResetIn {
   flex: 0 0 auto;
+}
+
+@container usage-dashboard-page (min-width: 720px) {
+  .groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container usage-dashboard-page (min-width: 1280px) {
+  .groups {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
