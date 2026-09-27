@@ -88,12 +88,23 @@ const decodeBase64Chunk = (chunk: string): Uint8Array | null => {
   let dataLength = chunk.length;
   while (dataLength > 0 && chunk[dataLength - 1] === '=') dataLength -= 1;
   if (dataLength % 4 === 1) return null;
+  const padding = chunk.length - dataLength;
+  if (
+    padding > 2 ||
+    (padding > 0 && chunk.length % 4 !== 0) ||
+    (padding === 1 && dataLength % 4 !== 3) ||
+    (padding === 2 && dataLength % 4 !== 2)
+  ) {
+    return null;
+  }
   const bytes = new Uint8Array(Math.floor((dataLength * 3) / 4));
   let byteIndex = 0;
   let buffer = 0;
   let bits = 0;
   for (let index = 0; index < dataLength; index += 1) {
-    const code = BASE64_LOOKUP[chunk.charCodeAt(index) & 0x7f];
+    const charCode = chunk.charCodeAt(index);
+    if (charCode >= BASE64_LOOKUP.length) return null;
+    const code = BASE64_LOOKUP[charCode];
     if (code < 0) return null;
     buffer = (buffer << 6) | code;
     bits += 6;
@@ -102,6 +113,8 @@ const decodeBase64Chunk = (chunk: string): Uint8Array | null => {
       bytes[byteIndex++] = (buffer >> bits) & 0xff;
     }
   }
+  // Canonical base64 requires discarded bits in the final sextet to be zero.
+  if (bits > 0 && (buffer & ((1 << bits) - 1)) !== 0) return null;
   return bytes;
 };
 
@@ -167,7 +180,22 @@ const decodeUtf8 = (bytes: Uint8Array): string | null => {
 interface GrpcWebFrames {
   dataFrames: Uint8Array[];
   trailerFields: Record<string, string>;
+  sawTrailer: boolean;
 }
+
+const parseTrailerPayload = (payload: Uint8Array): Record<string, string> | null => {
+  const text = decodeUtf8(payload);
+  if (text === null || !text.endsWith('\r\n')) return null;
+  const fields: Record<string, string> = {};
+  for (const line of text.slice(0, -2).split('\r\n')) {
+    const separator = line.indexOf(':');
+    if (separator <= 0) return null;
+    const key = line.slice(0, separator).trim().toLowerCase();
+    if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(key) || key in fields) return null;
+    fields[key] = line.slice(separator + 1).trim();
+  }
+  return fields;
+};
 
 const parseGrpcWebFrames = (bytes: Uint8Array): GrpcWebFrames | null => {
   const dataFrames: Uint8Array[] = [];
@@ -187,25 +215,24 @@ const parseGrpcWebFrames = (bytes: Uint8Array): GrpcWebFrames | null => {
     const end = start + length;
     if (end > bytes.length) return null;
     const payload = bytes.subarray(start, end);
-    if ((flags & 0x80) !== 0) {
+    if (flags === 0x80) {
+      if (sawTrailer) return null;
       sawTrailer = true;
-      const text = decodeUtf8(payload);
-      if (text === null) return null;
-      for (const line of text.split('\n')) {
-        const trimmed = line.trim();
-        const separator = trimmed.indexOf(':');
-        if (separator <= 0) continue;
-        trailerFields[trimmed.slice(0, separator).trim().toLowerCase()] = trimmed
-          .slice(separator + 1)
-          .trim();
-      }
-    } else {
+      const parsed = parseTrailerPayload(payload);
+      if (parsed === null) return null;
+      Object.assign(trailerFields, parsed);
+    } else if (flags === 0x00) {
+      if (sawTrailer) return null;
       dataFrames.push(payload);
+    } else {
+      // Compression and reserved flag bits are unsupported. Treating such a
+      // payload as plain protobuf could manufacture fields from compressed data.
+      return null;
     }
     index = end;
   }
   if (!sawTrailer && dataFrames.length === 0) return null;
-  return { dataFrames, trailerFields };
+  return { dataFrames, trailerFields, sawTrailer };
 };
 
 interface ProtobufField {
@@ -306,8 +333,13 @@ const scanProtobuf = (
 
 const pathKey = (path: number[]): string => path.join(',');
 
-const findVarintField = (scan: ProtobufScan, path: string): ProtobufField | undefined =>
-  scan.varintFields.find((field) => pathKey(field.path) === path);
+const findVarintFields = (scan: ProtobufScan, path: string): ProtobufField[] =>
+  scan.varintFields.filter((field) => pathKey(field.path) === path);
+
+const findUniqueVarintField = (scan: ProtobufScan, path: string): ProtobufField | undefined => {
+  const fields = findVarintFields(scan, path);
+  return fields.length === 1 ? fields[0] : undefined;
+};
 
 const isTimestampSeconds = (value: number): boolean =>
   value >= MIN_TIMESTAMP_SECONDS && value <= MAX_TIMESTAMP_SECONDS;
@@ -319,7 +351,7 @@ const resolvePeriodType = (typeValue: number | null): XaiWebBillingPeriodType =>
 };
 
 const isRecognizedPeriodType = (scan: ProtobufScan): boolean => {
-  const typeField = findVarintField(scan, CURRENT_PERIOD_TYPE_PATH);
+  const typeField = findUniqueVarintField(scan, CURRENT_PERIOD_TYPE_PATH);
   return typeField !== undefined && (typeField.value === 1 || typeField.value === 2);
 };
 
@@ -327,14 +359,15 @@ const isRecognizedPeriodType = (scan: ProtobufScan): boolean => {
  * and end bounds containing the current time. */
 const hasActiveCurrentPeriod = (scan: ProtobufScan, nowMs: number): boolean => {
   if (!isRecognizedPeriodType(scan)) return false;
-  const start = findVarintField(scan, CURRENT_PERIOD_START_PATH);
-  const end = findVarintField(scan, CURRENT_PERIOD_END_PATH);
+  const start = findUniqueVarintField(scan, CURRENT_PERIOD_START_PATH);
+  const end = findUniqueVarintField(scan, CURRENT_PERIOD_END_PATH);
   if (start === undefined || end === undefined) return false;
-  return start.value * 1000 <= nowMs && end.value * 1000 > nowMs;
+  if (!isTimestampSeconds(start.value) || !isTimestampSeconds(end.value)) return false;
+  return start.value < end.value && start.value * 1000 <= nowMs && end.value * 1000 > nowMs;
 };
 
 const readPeriodBoundMs = (scan: ProtobufScan, path: string): number | null => {
-  const field = findVarintField(scan, path);
+  const field = findUniqueVarintField(scan, path);
   return field !== undefined && isTimestampSeconds(field.value) ? field.value * 1000 : null;
 };
 
@@ -354,7 +387,7 @@ const buildPercentResult = (
   scan: ProtobufScan,
   nowMs: number
 ): XaiWebBillingParseResult => {
-  const typeField = findVarintField(scan, CURRENT_PERIOD_TYPE_PATH);
+  const typeField = findUniqueVarintField(scan, CURRENT_PERIOD_TYPE_PATH);
   return {
     outcome: 'percent',
     usedPercent,
@@ -388,8 +421,12 @@ export const parseXaiWebBillingResponse = (
   const frames = parseGrpcWebFrames(bytes);
   if (frames === null) return { outcome: 'invalid', reason: 'bad-frame' };
 
+  if (!frames.sawTrailer) return { outcome: 'no-percent', reason: 'no-trailer' };
   const rawStatus = frames.trailerFields['grpc-status'];
-  if (rawStatus === undefined) return { outcome: 'no-percent', reason: 'no-trailer' };
+  if (rawStatus === undefined) return { outcome: 'invalid', reason: 'bad-frame' };
+  if (!/^\d+$/.test(rawStatus)) {
+    return { outcome: 'no-percent', reason: 'rpc-error', grpcStatus: -1 };
+  }
   const grpcStatus = Number(rawStatus);
   if (!Number.isInteger(grpcStatus) || grpcStatus < 0) {
     return { outcome: 'no-percent', reason: 'rpc-error', grpcStatus: -1 };
@@ -400,6 +437,12 @@ export const parseXaiWebBillingResponse = (
   for (const dataFrame of frames.dataFrames) {
     scanProtobuf(dataFrame, [], 0, scan);
   }
+
+  // Both explicit and implicit percentages must come from one complete
+  // response message. Otherwise a valid-looking prefix can hide malformed or
+  // split trailing data and produce a false quota reading.
+  if (!scan.complete) return { outcome: 'no-percent', reason: 'incomplete' };
+  if (frames.dataFrames.length !== 1) return { outcome: 'no-percent', reason: 'multi-frame' };
 
   const wireCandidates = scan.fixed32Fields.filter(
     (field) =>
@@ -417,8 +460,6 @@ export const parseXaiWebBillingResponse = (
     });
     return buildPercentResult('grpc-wire', wirePercent.value, scan, nowMs);
   }
-  if (!scan.complete) return { outcome: 'no-percent', reason: 'incomplete' };
-  if (frames.dataFrames.length > 1) return { outcome: 'no-percent', reason: 'multi-frame' };
   if (scan.fixed32Fields.length > 0) return { outcome: 'no-percent', reason: 'fixed32-present' };
   if (!isRecognizedPeriodType(scan)) {
     return { outcome: 'no-percent', reason: 'unknown-period-type' };

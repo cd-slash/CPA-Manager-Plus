@@ -13,6 +13,7 @@ import {
   pbFixed32Field,
   pbKey,
   pbLenField,
+  pbVarintField,
 } from './xaiWebBillingFixtures';
 
 // Captured 2026-09-27 via a bearer-only management api-call probe of
@@ -47,6 +48,7 @@ describe('decodeGrpcWebText', () => {
     expect(decodeGrpcWebText('   \n  ')).toBeNull();
     expect(decodeGrpcWebText('ab*cd=')).toBeNull();
     expect(decodeGrpcWebText('A')).toBeNull();
+    expect(decodeGrpcWebText('AB==')).toBeNull();
     expect(decodeGrpcWebText('AA==AA===')).toBeNull();
     expect(decodeGrpcWebText(`${LIVE_BILLING_BODY}${'A'.repeat(70_000)}`)).toBeNull();
   });
@@ -93,6 +95,41 @@ describe('parseXaiWebBillingResponse', () => {
     });
   });
 
+  it('rejects unsupported frame flags and non-final or malformed trailers', () => {
+    const config = pbLenField(
+      1,
+      buildBillingConfig({ startSec: ELIGIBLE_START_SEC, endSec: ELIGIBLE_END_SEC })
+    );
+    const trailer = (text: string) => grpcFrame(0x80, new TextEncoder().encode(text));
+
+    expect(
+      parseXaiWebBillingResponse(
+        `${encodeBase64(grpcFrame(1, config))}${encodeBase64(trailer('grpc-status:0\r\n'))}`,
+        ELIGIBLE_NOW_MS
+      )
+    ).toEqual({ outcome: 'invalid', reason: 'bad-frame' });
+    expect(
+      parseXaiWebBillingResponse(
+        `${encodeBase64(trailer('grpc-status:0\r\n'))}${encodeBase64(grpcFrame(0, config))}`,
+        ELIGIBLE_NOW_MS
+      )
+    ).toEqual({ outcome: 'invalid', reason: 'bad-frame' });
+    expect(
+      parseXaiWebBillingResponse(
+        `${encodeBase64(grpcFrame(0, config))}${encodeBase64(
+          trailer('grpc-status:0\r\ngrpc-status:0\r\n')
+        )}`,
+        ELIGIBLE_NOW_MS
+      )
+    ).toEqual({ outcome: 'invalid', reason: 'bad-frame' });
+    expect(
+      parseXaiWebBillingResponse(
+        `${encodeBase64(grpcFrame(0, config))}${encodeBase64(trailer('grpc-message:ok\r\n'))}`,
+        ELIGIBLE_NOW_MS
+      )
+    ).toEqual({ outcome: 'invalid', reason: 'bad-frame' });
+  });
+
   it('adopts a wire-published percent even alongside an active period', () => {
     const result = billingBody({
       nowMs: ELIGIBLE_NOW_MS,
@@ -136,6 +173,16 @@ describe('parseXaiWebBillingResponse', () => {
     expect(result).toEqual({ outcome: 'no-percent', reason: 'incomplete' });
   });
 
+  it('does not adopt a wire-looking percent from an incomplete protobuf', () => {
+    const result = billingBody({
+      nowMs: ELIGIBLE_NOW_MS,
+      startSec: ELIGIBLE_START_SEC,
+      endSec: ELIGIBLE_END_SEC,
+      extraConfigFields: concatBytes(pbLenField(2, pbFixed32Field(1, 55)), pbKey(14, 2)),
+    });
+    expect(result).toEqual({ outcome: 'no-percent', reason: 'incomplete' });
+  });
+
   it('refuses the implicit zero across multiple data frames', () => {
     const config = pbLenField(
       1,
@@ -170,6 +217,16 @@ describe('parseXaiWebBillingResponse', () => {
       endSec: ELIGIBLE_END_SEC,
     });
     expect(expiredPeriod).toEqual({ outcome: 'no-percent', reason: 'inactive-period' });
+  });
+
+  it('refuses ambiguous duplicate current-period fields', () => {
+    const result = billingBody({
+      nowMs: ELIGIBLE_NOW_MS,
+      startSec: ELIGIBLE_START_SEC,
+      endSec: ELIGIBLE_END_SEC,
+      extraConfigFields: pbLenField(8, pbVarintField(1, 2)),
+    });
+    expect(result).toEqual({ outcome: 'no-percent', reason: 'unknown-period-type' });
   });
 
   it('treats a recognized monthly period as eligible', () => {

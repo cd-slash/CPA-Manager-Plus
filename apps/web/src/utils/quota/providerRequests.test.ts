@@ -2948,8 +2948,8 @@ describe('fetchXaiQuota', () => {
             config: {
               current_period: {
                 type: 'weekly',
-                start: '2027-01-11T00:00:00Z',
-                end: '2027-01-18T00:00:00Z',
+                start: '2027-01-15T08:00:00Z',
+                end: '2027-01-22T08:00:00Z',
               },
             },
           },
@@ -2994,9 +2994,56 @@ describe('fetchXaiQuota', () => {
         periodType: 'weekly',
         usagePercent: 0,
         usagePercentSource: 'grpc-implicit-zero',
-        periodStart: '2027-01-11T00:00:00Z',
-        periodEnd: '2027-01-18T00:00:00Z',
+        periodStart: '2027-01-15T08:00:00Z',
+        periodEnd: '2027-01-22T08:00:00Z',
       });
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('keeps usage unavailable when the grpc-web period does not match credits JSON', async () => {
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_001_000);
+    try {
+      mocks.request
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: {
+            config: {
+              current_period: {
+                type: 'weekly',
+                start: '2027-01-15T08:00:00Z',
+                end: '2027-01-22T08:00:00Z',
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: {},
+        })
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          hasStatusCode: true,
+          header: {},
+          bodyText: '',
+          body: grpcWebTextBillingBody({
+            startSec: 1_799_999_000,
+            endSec: 1_800_603_800,
+            type: 2,
+          }),
+        });
+
+      const result = await fetchXaiQuota({ name: 'xai.json', type: 'xai', authIndex: 'xai-1' }, t);
+
+      expect(result.usagePercent).toBeNull();
+      expect(result.usagePercentSource).toBeUndefined();
     } finally {
       dateNow.mockRestore();
     }
@@ -4418,4 +4465,3 @@ describe('fetchDevinQuota', () => {
     ).rejects.toThrow('devin_quota.empty_data');
   });
 });
-

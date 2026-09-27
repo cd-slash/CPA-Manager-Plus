@@ -1932,9 +1932,6 @@ export const probeXaiInference = async (
   return { statusCode: result.statusCode };
 };
 
-const msToIsoTimestamp = (ms: number | null): string | undefined =>
-  typeof ms === 'number' && Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
-
 /**
  * Best-effort grok.com billing fallback for period-only credits answers.
  * grpc-web-text keeps the exchange ASCII so it survives the api-call proxy;
@@ -1961,7 +1958,7 @@ const requestXaiWebBillingPercent = async (
     },
     { ...(requestConfig ?? {}), timeout }
   );
-  if (result.hasStatusCode && (result.statusCode < 200 || result.statusCode >= 300)) {
+  if (!result.hasStatusCode || result.statusCode < 200 || result.statusCode >= 300) {
     return null;
   }
   return parseXaiWebBillingResponse(result.body ?? result.bodyText ?? '', Date.now());
@@ -1975,14 +1972,34 @@ const adoptXaiWebBillingPercent = async (
   requestConfig?: AxiosRequestConfig
 ): Promise<XaiBillingSummary> => {
   if (normalizeNumberValue(summary.usagePercent) !== null) return summary;
+  const summaryStartMs = summary.periodStart ? Date.parse(summary.periodStart) : NaN;
+  const summaryEndMs = summary.periodEnd ? Date.parse(summary.periodEnd) : NaN;
+  if (
+    (summary.periodType !== 'weekly' && summary.periodType !== 'monthly') ||
+    !Number.isFinite(summaryStartMs) ||
+    !Number.isFinite(summaryEndMs) ||
+    summaryStartMs >= summaryEndMs
+  ) {
+    return summary;
+  }
   const parse = await requestXaiWebBillingPercent(authIndex, requestConfig).catch(() => null);
   if (parse === null || parse.outcome !== 'percent') return summary;
+  // The credits response identifies the authoritative billing period. Do not
+  // attach a reading from a stale, legacy, or otherwise different gRPC period.
+  // Protobuf timestamps are read at second precision, hence the <1s tolerance.
+  if (
+    parse.periodType !== summary.periodType ||
+    parse.periodStartMs === null ||
+    parse.periodEndMs === null ||
+    Math.abs(parse.periodStartMs - summaryStartMs) >= 1_000 ||
+    Math.abs(parse.periodEndMs - summaryEndMs) >= 1_000
+  ) {
+    return summary;
+  }
   return {
     ...summary,
     usagePercent: parse.usedPercent,
     usagePercentSource: parse.source,
-    periodStart: summary.periodStart ?? msToIsoTimestamp(parse.periodStartMs),
-    periodEnd: summary.periodEnd ?? msToIsoTimestamp(parse.periodEndMs),
   };
 };
 
@@ -2195,4 +2212,3 @@ export const fetchDevinQuota = async (
 
   return quotaData;
 };
-
