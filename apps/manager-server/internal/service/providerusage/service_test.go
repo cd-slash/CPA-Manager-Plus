@@ -2,6 +2,7 @@ package providerusage
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -58,6 +59,12 @@ func TestXAIUsesFixedOriginAndKeepsSuccessfulModels(t *testing.T) {
 		body, _ := io.ReadAll(req.Body)
 		if !strings.Contains(string(body), xaiCompletionsURL) || strings.Contains(string(body), "management-secret") {
 			t.Fatalf("unsafe payload: %s", body)
+		}
+		var payload struct {
+			Header map[string]string `json:"header"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil || payload.Header["Content-Type"] != "application/json" {
+			t.Fatal("xAI JSON probe must declare its upstream content type")
 		}
 		if calls == 1 {
 			return jsonResponse(`{"status_code":404,"header":{},"body":"unknown model"}`), nil
