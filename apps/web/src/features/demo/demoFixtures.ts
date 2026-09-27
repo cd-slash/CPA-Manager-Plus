@@ -96,7 +96,7 @@ const now = () => Date.now();
 const minute = 60 * 1000;
 const hour = 60 * minute;
 const day = 24 * hour;
-const demoOAuthAccountProviders = new Set(['codex', 'claude', 'antigravity', 'kimi', 'xai']);
+const demoOAuthAccountProviders = new Set(['codex', 'claude', 'antigravity', 'kimi', 'xai', 'zai']);
 
 let demoUsageArchiveSequence = 2;
 const createDemoUsageArchiveStatuses = (): UsageArchiveStatus[] => [
@@ -864,6 +864,23 @@ const initialRawConfig: Record<string, unknown> = {
 const demoAuthFiles: AuthFilesResponse = {
   total: 23,
   files: [
+    {
+      id: 'zai-coding-plan.json',
+      name: 'zai-coding-plan.json',
+      type: 'zai',
+      provider: 'zai',
+      authIndex: 'zai-coding-plan-01',
+      disabled: false,
+      status: 'healthy',
+      size: 512,
+      modified: now() - 3 * hour,
+      account_snapshot: 'GLM Coding Plan',
+      account: 'GLM Coding Plan',
+      label: 'Z.AI',
+      success: 64,
+      failed: 1,
+      recent_requests: demoRecentRequests(2),
+    },
     {
       id: 'codex-upgrade-demo-runtime',
       name: 'codex-upgrade-demo.json',
@@ -1989,6 +2006,22 @@ const buildMonitoringAnalytics = (
 
   const accountStats = [
     {
+      id: 'acct_zai_coding_plan',
+      account_snapshot: 'GLM Coding Plan',
+      auth_label_snapshot: 'Z.AI',
+      auth_provider_snapshot: 'zai',
+      auth_indices: ['zai-coding-plan-01'],
+      sources: ['gateway'],
+      source_hashes: ['src_zai_coding_plan'],
+      calls: 640,
+      failure_calls: 12,
+      total_tokens: 910_000,
+      cost: 12.4,
+      average_latency_ms: 940,
+      last_seen_ms: analyticsNow - 4 * minute,
+      models: [],
+    },
+    {
       id: 'acct_platform_team',
       account_snapshot: 'Platform Team',
       auth_label_snapshot: 'Codex Team',
@@ -2577,6 +2610,23 @@ const buildMonitoringAnalytics = (
 
   const credentialStats = [
     {
+      id: 'zai-coding-plan-01',
+      auth_file_snapshot: 'zai-coding-plan.json',
+      auth_index: 'zai-coding-plan-01',
+      source: 'gateway',
+      source_hash: 'src_zai_coding_plan',
+      account_snapshot: 'GLM Coding Plan',
+      auth_label_snapshot: 'Z.AI',
+      auth_provider_snapshot: 'zai',
+      calls: 640,
+      failure_calls: 12,
+      total_tokens: 910_000,
+      cost: 12.4,
+      average_latency_ms: 940,
+      last_seen_ms: analyticsNow - 4 * minute,
+      models: [],
+    },
+    {
       id: 'codex-team-01',
       auth_file_snapshot: 'codex-team-01.json',
       auth_index: 'codex-team-01',
@@ -3130,6 +3180,23 @@ const buildMonitoringAnalytics = (
     });
 
   const apiKeyStats = [
+    {
+      id: 'hash_zai_coding_plan',
+      api_key_hash: 'hash_zai_coding_plan',
+      account_snapshot: 'GLM Coding Plan',
+      auth_label_snapshot: 'Z.AI',
+      auth_provider_snapshot: 'zai',
+      auth_indices: ['zai-coding-plan-01'],
+      sources: ['gateway'],
+      source_hashes: ['src_zai_coding_plan'],
+      calls: 640,
+      failure_calls: 12,
+      total_tokens: 910_000,
+      cost: 12.4,
+      average_latency_ms: 940,
+      last_seen_ms: analyticsNow - 4 * minute,
+      models: [],
+    },
     {
       id: 'hash_openai_primary',
       api_key_hash: 'hash_openai_primary',
@@ -3721,6 +3788,7 @@ const buildMonitoringAnalytics = (
       averageLatencyMs: 1510,
       missingBuckets: [],
     },
+
   ];
   const apiKeyTimeline = timeline
     .flatMap((point, bucketIndex) =>
@@ -7431,6 +7499,7 @@ export const getDemoApiCallResult = (payload: DemoApiCallPayload = {}) => {
 
   let statusCode = 200;
   let body: unknown = { data: demoProviderModels.map((model) => ({ id: model.name })) };
+  let extraHeader: Record<string, string[]> = {};
 
   if (requestUrl.includes('/wham/usage')) {
     if (isCodexExpired) {
@@ -7757,6 +7826,37 @@ export const getDemoApiCallResult = (payload: DemoApiCallPayload = {}) => {
     } else {
       body = { id: `demo-${authIndex || 'xai'}`, active: true };
     }
+  } else if (requestUrl.includes('api.x.ai/v1/chat/completions')) {
+    if (isXaiExpired) {
+      statusCode = 401;
+      body = { code: 'invalid_token', error: 'The xAI API key was rejected.' };
+    } else {
+      body = { id: `demo-${authIndex || 'xai'}`, choices: [] };
+      extraHeader = {
+        'x-ratelimit-limit-tokens': ['120000'],
+        'x-ratelimit-remaining-tokens': [isXaiSpendingLimited ? '6000' : '78000'],
+      };
+    }
+  } else if (requestUrl.includes('api.z.ai/api/monitor/usage/quota/limit')) {
+    body = {
+      data: {
+        level: 'GLM Coding Pro',
+        limits: [
+          {
+            unit: 3,
+            number: 5,
+            percentage: isXaiSpendingLimited ? 96 : 38,
+            nextResetTime: new Date(now() + 2 * hour).toISOString(),
+          },
+          {
+            unit: 6,
+            number: 1,
+            percentage: 21,
+            nextResetTime: new Date(now() + 4 * day).toISOString(),
+          },
+        ],
+      },
+    };
   } else if (requestUrl.includes('cloudcode-pa.googleapis.com')) {
     body = {
       groups: [
@@ -7817,6 +7917,7 @@ export const getDemoApiCallResult = (payload: DemoApiCallPayload = {}) => {
     status_code: statusCode,
     has_status_code: true,
     header: {
+      ...extraHeader,
       'content-type': ['application/json'],
       date: [new Date().toUTCString()],
     },

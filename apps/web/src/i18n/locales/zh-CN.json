@@ -254,7 +254,8 @@
     "system_info": "系统信息",
     "system_info_short": "系统",
     "usage_maintenance": "用量维护",
-    "usage_maintenance_short": "维护"
+    "usage_maintenance_short": "维护",
+    "usage_dashboard": "用量"
   },
   "usage_maintenance": {
     "archive_management": "归档管理",
@@ -5343,5 +5344,34 @@
       "ultra": "Ultra",
       "ultra_lite": "Ultra Lite"
     }
+  },
+  "usage_dashboard": {
+    "title": "用量",
+    "updated": "更新于",
+    "no_accounts": "暂无账号",
+    "no_usage_windows": "暂无用量窗口",
+    "missing_auth_index": "凭证索引不可用",
+    "quota_error": "配额请求失败",
+    "status_ok": "正常",
+    "status_disabled": "已停用",
+    "status_error": "错误",
+    "status_loading": "加载中",
+    "status_pending": "等待中",
+    "reset_d": "{{count}}天后",
+    "reset_h": "{{count}}小时后",
+    "reset_m": "{{count}}分钟后",
+    "reset_now": "即将重置",
+    "provider_codex": "Codex",
+    "provider_claude": "Claude",
+    "provider_zai": "Z.AI",
+    "provider_antigravity": "Antigravity",
+    "provider_kimi": "Kimi",
+    "provider_xai": "xAI",
+    "provider_devin": "Devin",
+    "provider_meta": "Meta",
+    "provider_gemini": "Gemini",
+    "provider_qwen": "Qwen",
+    "provider_iflow": "iFlow",
+    "provider_vertex": "Vertex"
   }
 }

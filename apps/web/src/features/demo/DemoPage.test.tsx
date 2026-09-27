@@ -273,6 +273,7 @@ describe('DemoPage', () => {
       'kimi',
       'openai',
       'xai',
+      'zai',
     ];
     const nonOauthFiles = [
       'gemini-prod-01.json',
@@ -310,7 +311,7 @@ describe('DemoPage', () => {
     );
 
     expect(authFiles.total).toBe(authFiles.files.length);
-    expect(authFiles.files.length).toBe(23);
+    expect(authFiles.files.length).toBe(24);
     expect(authFiles.files.every((file) => typeof file.id === 'string' && file.id.length > 0)).toBe(
       true
     );
@@ -326,11 +327,12 @@ describe('DemoPage', () => {
         (file.recent_requests ?? []).some((bucket) => bucket.success + bucket.failed > 0)
       )
     ).toBe(true);
-    expect(Array.from(providers).sort()).toEqual([...oauthProviders, 'openai'].sort());
+    expect(Array.from(providers).sort()).toEqual([...oauthProviders, 'openai', 'zai'].sort());
     oauthProviders.forEach((provider) => {
       expect(providerCounts[provider]).toBeGreaterThanOrEqual(3);
     });
     expect(providerCounts.openai).toBe(1);
+    expect(providerCounts.zai).toBe(1);
     expect(Array.from(analyticsProviders).sort()).toEqual(analyticsProviderList);
     expect([...(analytics.filter_options?.providers ?? [])].sort()).toEqual(analyticsProviderList);
     expect(accountHistory.checkpoint.pending).toBe(false);
@@ -408,6 +410,7 @@ describe('DemoPage', () => {
         'xai-ops.json',
         'xai-payg-buffer.json',
         'xai-payg-cap.json',
+        'zai-coding-plan.json',
       ].sort()
     );
     nonOauthFiles.forEach((fileName) => expect(fileNames).not.toContain(fileName));
