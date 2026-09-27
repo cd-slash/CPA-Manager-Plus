@@ -256,7 +256,8 @@
     "system_info": "System Info",
     "system_info_short": "System",
     "usage_maintenance": "Usage Maintenance",
-    "usage_maintenance_short": "Maintenance"
+    "usage_maintenance_short": "Maintenance",
+    "usage_dashboard": "Usage"
   },
   "usage_maintenance": {
     "archive_management": "Archive management",
@@ -5348,5 +5349,35 @@
       "ultra": "Ultra",
       "ultra_lite": "Ultra Lite"
     }
+  },
+  "usage_dashboard": {
+    "title": "Usage",
+    "updated": "Updated",
+    "no_accounts": "No accounts",
+    "no_usage_windows": "No usage windows",
+    "missing_auth_index": "Credential index unavailable",
+    "quota_error": "Quota request failed",
+    "remaining": "remaining",
+    "status_ok": "OK",
+    "status_disabled": "Disabled",
+    "status_error": "Error",
+    "status_loading": "Loading",
+    "status_pending": "Pending",
+    "reset_d": "in {{count}}d",
+    "reset_h": "in {{count}}h",
+    "reset_m": "in {{count}}m",
+    "reset_now": "now",
+    "provider_codex": "Codex",
+    "provider_claude": "Claude",
+    "provider_zai": "Z.AI",
+    "provider_antigravity": "Antigravity",
+    "provider_kimi": "Kimi",
+    "provider_xai": "xAI",
+    "provider_devin": "Devin",
+    "provider_meta": "Meta",
+    "provider_gemini": "Gemini",
+    "provider_qwen": "Qwen",
+    "provider_iflow": "iFlow",
+    "provider_vertex": "Vertex"
   }
 }

@@ -516,6 +516,12 @@ function MainLayoutContent({ routeBase = '', demoMode = false }: MainLayoutProps
     shortLabel: navShortLabel('nav.dashboard', t('nav.dashboard')),
     icon: sidebarIcons.dashboard,
   };
+  const usageDashboardNavItem: NavItem = {
+    path: '/usage-dashboard',
+    label: t('nav.usage_dashboard', { defaultValue: 'Usage' }),
+    shortLabel: navShortLabel('nav.usage_dashboard', t('nav.usage_dashboard', { defaultValue: 'Usage' })),
+    icon: sidebarIcons.usageAnalytics,
+  };
   const usageAnalyticsNavItem = featureAvailability.requestMonitoringAvailable
     ? {
         path: '/usage-analytics',
@@ -574,6 +580,7 @@ function MainLayoutContent({ routeBase = '', demoMode = false }: MainLayoutProps
   const navSections: NavItem[][] = [
     [
       dashboardNavItem,
+      usageDashboardNavItem,
       ...(usageAnalyticsNavItem ? [usageAnalyticsNavItem] : []),
       ...(monitoringNavItem ? [monitoringNavItem] : []),
       ...(usageMaintenanceNavItem ? [usageMaintenanceNavItem] : []),

@@ -24,7 +24,7 @@ describe('Demo accounts quota & usage presentation regression', () => {
     const quotaState = getDemoQuotaStoreState();
     const rows = buildAccountRows(authFiles, quotaState);
 
-    expect(rows.length).toBe(23);
+    expect(rows.length).toBe(24);
 
     const proRow = rows.find((r) => r.fileName === 'codex-pro-20x-01.json');
     expect(proRow).toBeDefined();

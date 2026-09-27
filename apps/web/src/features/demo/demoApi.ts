@@ -659,6 +659,45 @@ export async function handleDemoApiRequest<T = unknown>(
   }
 
   if (pathname === '/api-call') return getDemoApiCallResult(data as never) as T;
+  if (pathname === '/usage-dashboard/zai') {
+    return {
+      plan: 'GLM Coding Pro',
+      windows: [
+        {
+          id: 'zai-3',
+          label: '5-hour limit',
+          remainingPercent: 58,
+          resetAtMs: Date.now() + 90 * 60_000,
+        },
+        {
+          id: 'zai-6',
+          label: 'Weekly limit',
+          remainingPercent: 89,
+          resetAtMs: Date.now() + 3 * 24 * 60 * 60_000,
+        },
+      ],
+    } as T;
+  }
+  if (pathname === '/usage-dashboard/xai') {
+    return {
+      windows: [
+        {
+          id: 'xai-ratelimit-grok-4.7',
+          label: 'grok-4.7 tokens',
+          remainingPercent: 72,
+          limitTokens: 100000,
+          remainingTokens: 72000,
+        },
+        {
+          id: 'xai-ratelimit-grok-4.3',
+          label: 'grok-4.3 tokens',
+          remainingPercent: 94,
+          limitTokens: 100000,
+          remainingTokens: 94000,
+        },
+      ],
+    } as T;
+  }
   if (pathname === '/api-key-usage') {
     return {
       items: [
