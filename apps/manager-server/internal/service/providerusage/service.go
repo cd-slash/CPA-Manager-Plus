@@ -166,7 +166,7 @@ func (s *Service) XAI(ctx context.Context, authIndex string) (XAIResult, error) 
 			continue
 		}
 		percent := clamp(*remaining / *limit * 100)
-		windows = append(windows, Window{ID: "xai-ratelimit-" + model, Label: model + " tokens", RemainingPercent: &percent, LimitTokens: limit, RemainingTokens: remaining})
+		windows = append(windows, Window{ID: "xai-ratelimit-" + model, Label: model + " token rate limit", RemainingPercent: &percent, LimitTokens: limit, RemainingTokens: remaining})
 	}
 	if len(windows) == 0 {
 		return XAIResult{}, errors.New("xAI returned no rate-limit windows")

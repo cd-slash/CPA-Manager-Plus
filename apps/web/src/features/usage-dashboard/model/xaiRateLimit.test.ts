@@ -34,7 +34,7 @@ describe('buildXaiRateLimitWindow', () => {
     });
     expect(window).toEqual({
       id: 'xai-ratelimit-grok-4.7',
-      label: 'grok-4.7 tokens',
+      label: 'grok-4.7 token rate limit',
       remainingPercent: 25,
       limitTokens: 1000,
       remainingTokens: 250,

@@ -683,14 +683,14 @@ export async function handleDemoApiRequest<T = unknown>(
       windows: [
         {
           id: 'xai-ratelimit-grok-4.7',
-          label: 'grok-4.7 tokens',
+          label: 'grok-4.7 token rate limit',
           remainingPercent: 72,
           limitTokens: 100000,
           remainingTokens: 72000,
         },
         {
           id: 'xai-ratelimit-grok-4.3',
-          label: 'grok-4.3 tokens',
+          label: 'grok-4.3 token rate limit',
           remainingPercent: 94,
           limitTokens: 100000,
           remainingTokens: 94000,

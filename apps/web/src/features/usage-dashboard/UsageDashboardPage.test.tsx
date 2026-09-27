@@ -18,10 +18,13 @@ vi.mock('@/services/api/authFiles', () => ({
           authIndex: 'zai-01',
           disabled: false,
         },
+        { name: 'xai-team.json', provider: 'xai', authIndex: 'xai-01', disabled: false },
       ],
     })),
   },
 }));
+
+let xaiRateLimitWindows: unknown[] = [];
 
 const apiCallResponses = new Map<string, [number, string]>();
 
@@ -61,7 +64,7 @@ vi.mock('@/services/api/client', async (importOriginal) => {
           },
         ],
       })),
-      post: vi.fn(async () => ({ windows: [] })),
+      post: vi.fn(async () => ({ windows: xaiRateLimitWindows })),
     },
   };
 });
@@ -101,8 +104,28 @@ const toJson = (instance: {
 }): ReactTestRendererJSON | ReactTestRendererJSON[] =>
   (instance.toJSON() ?? []) as ReactTestRendererJSON | ReactTestRendererJSON[];
 
+const findProviderTree = (
+  nodes: ReactTestRendererJSON[],
+  provider: string
+): ReactTestRendererJSON | undefined => {
+  for (const node of nodes) {
+    const props =
+      typeof node.props === 'object' && node.props !== null
+        ? (node.props as Record<string, unknown>)
+        : undefined;
+    if (props?.['data-usage-provider'] === provider) return node;
+    const children = Array.isArray(node.children)
+      ? (node.children.filter((child) => typeof child === 'object') as ReactTestRendererJSON[])
+      : [];
+    const match = findProviderTree(children, provider);
+    if (match) return match;
+  }
+  return undefined;
+};
+
 describe('UsageDashboardPage', () => {
   beforeEach(() => {
+    xaiRateLimitWindows = [];
     apiCallResponses.clear();
     apiCallResponses.set('https://api.anthropic.com/api/oauth/usage', [
       200,
@@ -156,6 +179,44 @@ describe('UsageDashboardPage', () => {
     expect(texts.join('')).toContain('58% remaining');
     // Codex upstream returns 404 -> visible error state, group still renders.
     expect(texts).toContain('Error');
+    renderer!.unmount();
+  });
+
+  it('labels xAI per-model rate-limit windows without reset periods', async () => {
+    xaiRateLimitWindows = [
+      {
+        id: 'xai-ratelimit-grok-4.7',
+        label: 'grok-4.7 token rate limit',
+        remainingPercent: 72,
+        limitTokens: 100000,
+        remainingTokens: 72000,
+      },
+      {
+        id: 'xai-ratelimit-grok-4.3',
+        label: 'grok-4.3 token rate limit',
+        remainingPercent: 100,
+        limitTokens: 100000,
+        remainingTokens: 100000,
+      },
+    ];
+
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(async () => {
+      renderer = create(<UsageDashboardPage />);
+    });
+    await flush();
+
+    const rendered = toJson(renderer!);
+    const trees = Array.isArray(rendered) ? rendered : [rendered];
+    const xaiTree = findProviderTree(trees, 'xai');
+    expect(xaiTree).toBeDefined();
+    const texts = collectText(xaiTree);
+    expect(texts).toContain('grok-4.7 token rate limit');
+    expect(texts).toContain('grok-4.3 token rate limit');
+    expect(texts.join('')).toContain('72% remaining');
+    expect(texts.join('')).toContain('100% remaining');
+    // Rate-limit headers carry no 5h/weekly reset clock: no countdown may render.
+    expect(texts.join('')).not.toMatch(/in \d+[dhm]/);
     renderer!.unmount();
   });
 });
