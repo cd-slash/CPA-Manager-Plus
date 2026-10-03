@@ -5378,6 +5378,12 @@
     "provider_qwen": "Qwen",
     "provider_iflow": "iFlow",
     "provider_vertex": "Vertex",
+    "provider_deepseek": "DeepSeek",
+    "deepseek_account": "API-аккаунт",
+    "balance_available": "Доступный баланс",
+    "balance_reference_usd": "референс $20 USD",
+    "balance_not_configured": "Не настроено",
+    "balance_unavailable": "Баланс недоступен",
     "unavailable": "Недоступно"
   }
 }

@@ -5374,6 +5374,12 @@
     "provider_qwen": "Qwen",
     "provider_iflow": "iFlow",
     "provider_vertex": "Vertex",
+    "provider_deepseek": "DeepSeek",
+    "deepseek_account": "API 帳戶",
+    "balance_available": "可用餘額",
+    "balance_reference_usd": "$20 USD 參考",
+    "balance_not_configured": "未配置",
+    "balance_unavailable": "餘額不可用",
     "unavailable": "無法取得"
   }
 }

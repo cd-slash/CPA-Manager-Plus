@@ -63,6 +63,7 @@ type Config struct {
 	AccountActionsEnvSet         bool
 	AccountActionsAutoEnvSet     bool
 	ZAIAPIKey                    string
+	DeepSeekAPIKey               string
 	XAIProbeModels               []string
 }
 
@@ -205,6 +206,7 @@ func LoadWithOptions(options LoadOptions) (Config, error) {
 		AccountActionsEnvSet:      hasEnv("USAGE_ACCOUNT_ACTIONS_ENABLED"),
 		AccountActionsAutoEnvSet:  hasEnv("USAGE_ACCOUNT_ACTIONS_AUTO_DISABLE"),
 		ZAIAPIKey:                 strings.TrimSpace(os.Getenv("CPA_MANAGER_ZAI_API_KEY")),
+		DeepSeekAPIKey:            strings.TrimSpace(os.Getenv("CPA_MANAGER_DEEPSEEK_API_KEY")),
 		XAIProbeModels:            splitCSV(env("CPA_MANAGER_XAI_PROBE_MODELS", "grok-4.7,grok-4.3")),
 	}, nil
 }

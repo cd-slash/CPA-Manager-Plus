@@ -659,6 +659,12 @@ export async function handleDemoApiRequest<T = unknown>(
   }
 
   if (pathname === '/api-call') return getDemoApiCallResult(data as never) as T;
+  if (pathname === '/usage-dashboard/deepseek') {
+    return {
+      currency: 'USD',
+      totalBalance: 12.5,
+    } as T;
+  }
   if (pathname === '/usage-dashboard/zai') {
     return {
       plan: 'GLM Coding Pro',

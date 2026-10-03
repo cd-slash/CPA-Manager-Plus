@@ -17,6 +17,11 @@ import type {
 import { isValidQuotaResetAtMs } from '@/utils/quota/formatters';
 import { getQuotaCredentialStoreKey } from '@/utils/quota/credentialScope';
 import { maskAuthFileName } from './maskFileName';
+import {
+  deepSeekReferencePercent,
+  formatDeepSeekBalanceUsd,
+  type DeepSeekBalanceData,
+} from './deepseekBalance';
 import type { XaiRateLimitWindow } from './xaiRateLimit';
 import type { ZaiQuotaWindow } from './zaiQuota';
 
@@ -33,6 +38,11 @@ export interface UsageWindowRow {
    * explicit unavailable state: never as an invented 0% or 100%.
    */
   unavailable?: boolean;
+  /**
+   * Factual value readout rendered instead of a "N% remaining" readout
+   * (e.g. the DeepSeek USD balance against its fixed reference limit).
+   */
+  valueNote?: string;
 }
 
 export interface UsageAccountRow {
@@ -213,6 +223,34 @@ const firstFiniteTimestamp = (...values: Array<number | null | undefined>): numb
   return null;
 };
 
+/**
+ * DeepSeek API account row: a single env-configured account whose balance is
+ * displayed against the fixed USD reference limit. The bar is bounded
+ * visually; the reference is never presented as measured spend.
+ */
+const deepSeekAccountRow = (state: DeepSeekBalanceInput, t: TFunction): UsageAccountRow => {
+  const windows: UsageWindowRow[] = [];
+  if (state.status === 'success' && state.balance) {
+    windows.push({
+      key: 'deepseek:balance',
+      label: t('usage_dashboard.balance_available'),
+      remainingPercent: deepSeekReferencePercent(state.balance.totalBalance),
+      resetAtMs: null,
+      valueNote: `${formatDeepSeekBalanceUsd(state.balance.totalBalance)} ${state.balance.currency} · ${t('usage_dashboard.balance_reference_usd')}`,
+    });
+  }
+  return {
+    key: 'deepseek:api-account',
+    provider: 'deepseek',
+    maskedName: t('usage_dashboard.deepseek_account'),
+    planLabel: null,
+    status: state.status === 'success' ? (windows.length > 0 ? 'ok' : 'error') : state.status,
+    statusDetail: state.status === 'error' ? state.error || null : null,
+    windows,
+    fetchedAtMs: null,
+  };
+};
+
 type ProviderQuotaSnapshot = {
   status: 'idle' | 'loading' | 'success' | 'error' | undefined;
   error?: string;
@@ -258,6 +296,7 @@ export const PROVIDER_ORDER = [
   'qwen',
   'iflow',
   'vertex',
+  'deepseek',
 ] as const;
 
 export const normalizeProviderKey = (file: AuthFileItem): string => {
@@ -271,6 +310,12 @@ export const normalizeProviderKey = (file: AuthFileItem): string => {
   if (raw === 'anthropic') return 'claude';
   return raw || 'unknown';
 };
+
+export interface DeepSeekBalanceInput {
+  status: 'loading' | 'success' | 'error';
+  balance: DeepSeekBalanceData | null;
+  error?: string | null;
+}
 
 export interface UsageDashboardAccountInput {
   file: AuthFileItem;
@@ -296,6 +341,8 @@ export interface BuildUsageRowsInput extends UsageDashboardQuotaStates {
     windowsByFile: Record<string, XaiRateLimitWindow[]>;
     statusByFile: Record<string, 'loading' | 'success' | 'error'>;
   };
+  /** Server-side DeepSeek API account balance (env-held key, one account). */
+  deepseek?: DeepSeekBalanceInput;
 }
 
 const getStoreKey = (file: AuthFileItem): string => getQuotaCredentialStoreKey(file);
@@ -399,6 +446,10 @@ export const buildUsageAccountRows = (input: BuildUsageRowsInput): UsageProvider
       ),
     };
   });
+
+  if (input.deepseek) {
+    accounts.push(deepSeekAccountRow(input.deepseek, input.t));
+  }
 
   const groups = new Map<string, UsageAccountRow[]>();
   for (const account of accounts) {

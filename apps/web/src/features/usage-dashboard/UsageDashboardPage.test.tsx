@@ -25,6 +25,8 @@ vi.mock('@/services/api/authFiles', () => ({
 }));
 
 let xaiRateLimitWindows: unknown[] = [];
+let deepSeekBalanceResponse: unknown = { currency: 'USD', totalBalance: 12.5 };
+let deepSeekGetError: Error | null = null;
 
 const apiCallResponses = new Map<string, [number, string]>();
 
@@ -47,23 +49,29 @@ vi.mock('@/services/api/client', async (importOriginal) => {
   return {
     ...actual,
     apiClient: {
-      get: vi.fn(async () => ({
-        plan: 'GLM Coding Pro',
-        windows: [
-          {
-            id: 'zai-3',
-            label: '5-hour limit',
-            remainingPercent: 58,
-            resetAtMs: Date.now() + 90 * 60_000,
-          },
-          {
-            id: 'zai-6',
-            label: 'Weekly limit',
-            remainingPercent: 89,
-            resetAtMs: Date.now() + 3 * 24 * 60 * 60_000,
-          },
-        ],
-      })),
+      get: vi.fn(async (url: string) => {
+        if (url === '/usage-dashboard/deepseek') {
+          if (deepSeekGetError) throw deepSeekGetError;
+          return deepSeekBalanceResponse;
+        }
+        return {
+          plan: 'GLM Coding Pro',
+          windows: [
+            {
+              id: 'zai-3',
+              label: '5-hour limit',
+              remainingPercent: 58,
+              resetAtMs: Date.now() + 90 * 60_000,
+            },
+            {
+              id: 'zai-6',
+              label: 'Weekly limit',
+              remainingPercent: 89,
+              resetAtMs: Date.now() + 3 * 24 * 60 * 60_000,
+            },
+          ],
+        };
+      }),
       post: vi.fn(async () => ({ windows: xaiRateLimitWindows })),
     },
   };
@@ -145,6 +153,8 @@ const findWindowNode = (
 describe('UsageDashboardPage', () => {
   beforeEach(() => {
     xaiRateLimitWindows = [];
+    deepSeekBalanceResponse = { currency: 'USD', totalBalance: 12.5 };
+    deepSeekGetError = null;
     apiCallResponses.clear();
     apiCallResponses.set('https://api.anthropic.com/api/oauth/usage', [
       200,
@@ -358,6 +368,82 @@ describe('UsageDashboardPage', () => {
           (child as { props?: { className?: string } }).props?.className?.includes('track')
       )
     ).toBe(false);
+    renderer!.unmount();
+  });
+
+  it('renders the DeepSeek balance against the fixed $20 reference without a spend claim', async () => {
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(async () => {
+      renderer = create(<UsageDashboardPage />);
+    });
+    await flush();
+
+    const rendered = toJson(renderer!);
+    const trees = Array.isArray(rendered) ? rendered : [rendered];
+    const deepSeekTree = findProviderTree(trees, 'deepseek');
+    expect(deepSeekTree).toBeDefined();
+    const texts = collectText(deepSeekTree);
+    expect(texts.join('')).toContain('Available balance');
+    expect(texts.join('')).toContain('$12.50 USD');
+    expect(texts.join('')).toContain('$20 USD reference');
+    // The balance row never renders a "% remaining" spend proxy.
+    expect(texts.join('')).not.toMatch(/% remaining/);
+    // The bounded meter carries the balance readout as its accessible text.
+    const windowNode = findWindowNode([deepSeekTree!], 'deepseek:balance');
+    expect(windowNode).toBeDefined();
+    const meter = (windowNode!.children ?? []).find(
+      (child) =>
+        typeof child === 'object' &&
+        (child as { props?: { role?: string } }).props?.role === 'meter'
+    ) as { props?: { 'aria-valuenow'?: number; 'aria-valuetext'?: string } } | undefined;
+    expect(meter?.props?.['aria-valuenow']).toBe(63);
+    expect(meter?.props?.['aria-valuetext']).toContain('$12.50 USD');
+    renderer!.unmount();
+  });
+
+  it('bounds a DeepSeek balance above the reference at 100% without inventing spend', async () => {
+    deepSeekBalanceResponse = { currency: 'USD', totalBalance: 48 };
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(async () => {
+      renderer = create(<UsageDashboardPage />);
+    });
+    await flush();
+
+    const rendered = toJson(renderer!);
+    const trees = Array.isArray(rendered) ? rendered : [rendered];
+    const deepSeekTree = findProviderTree(trees, 'deepseek');
+    expect(deepSeekTree).toBeDefined();
+    const windowNode = findWindowNode([deepSeekTree!], 'deepseek:balance');
+    const meter = (windowNode!.children ?? []).find(
+      (child) =>
+        typeof child === 'object' &&
+        (child as { props?: { role?: string } }).props?.role === 'meter'
+    ) as { props?: { 'aria-valuenow'?: number } } | undefined;
+    expect(meter?.props?.['aria-valuenow']).toBe(100);
+    expect(collectText(deepSeekTree).join('')).toContain('$48.00 USD');
+    renderer!.unmount();
+  });
+
+  it('renders the DeepSeek group error state when the server has no key', async () => {
+    deepSeekGetError = Object.assign(new Error('usage_dashboard.balance_not_configured'), {
+      name: 'ApiError',
+      status: 501,
+    });
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(async () => {
+      renderer = create(<UsageDashboardPage />);
+    });
+    await flush();
+
+    const rendered = toJson(renderer!);
+    const trees = Array.isArray(rendered) ? rendered : [rendered];
+    const deepSeekTree = findProviderTree(trees, 'deepseek');
+    expect(deepSeekTree).toBeDefined();
+    const texts = collectText(deepSeekTree);
+    expect(texts).toContain('Error');
+    expect(texts.join('')).toContain('Not configured');
+    // No balance row may render from a failed fetch.
+    expect(findWindowNode([deepSeekTree!], 'deepseek:balance')).toBeUndefined();
     renderer!.unmount();
   });
 });
