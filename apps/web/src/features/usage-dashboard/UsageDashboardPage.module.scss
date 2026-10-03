@@ -231,6 +231,13 @@
   color: var(--text-primary);
 }
 
+.windowValue {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
 .windowUnavailable {
   font-size: 13px;
   font-weight: 600;

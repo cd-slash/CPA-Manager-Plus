@@ -23,6 +23,7 @@ import { getQuotaCredentialStoreKey } from '@/utils/quota/credentialScope';
 import { mapWithConcurrency } from '@/features/accounts/model/asyncPool';
 import { useInterval } from '@/hooks/useInterval';
 import { normalizeProviderKey } from '../model/usageDashboardRows';
+import { fetchDeepSeekBalance, type DeepSeekBalanceData } from '../model/deepseekBalance';
 import { fetchXaiRateLimits, type XaiRateLimitWindow } from '../model/xaiRateLimit';
 import { fetchZaiQuota, isZaiAuthFile, type ZaiQuotaWindow } from '../model/zaiQuota';
 
@@ -43,6 +44,12 @@ interface XaiRateLimitState {
   statusByFile: Record<string, LoadStatus>;
 }
 
+interface DeepSeekState {
+  status: LoadStatus;
+  balance: DeepSeekBalanceData | null;
+  error: string | null;
+}
+
 export const EMPTY_ZAI: ZaiState = {
   windowsByFile: {},
   statusByFile: {},
@@ -53,6 +60,12 @@ export const EMPTY_ZAI: ZaiState = {
 export const EMPTY_XAI_RATE_LIMITS: XaiRateLimitState = {
   windowsByFile: {},
   statusByFile: {},
+};
+
+export const EMPTY_DEEPSEEK: DeepSeekState = {
+  status: 'loading',
+  balance: null,
+  error: null,
 };
 
 export interface UsageDashboardQuotaStates {
@@ -72,6 +85,7 @@ export interface UsageDashboardState {
   lastRefreshedAtMs: number | null;
   zai: ZaiState;
   xaiRateLimits: XaiRateLimitState;
+  deepseek: DeepSeekState;
   quotaStates: UsageDashboardQuotaStates;
   refresh: () => void;
 }
@@ -83,6 +97,7 @@ export const useUsageDashboard = (t: TFunction): UsageDashboardState => {
   const [lastRefreshedAtMs, setLastRefreshedAtMs] = useState<number | null>(null);
   const [zai, setZai] = useState<ZaiState>(EMPTY_ZAI);
   const [xaiRateLimits, setXaiRateLimits] = useState<XaiRateLimitState>(EMPTY_XAI_RATE_LIMITS);
+  const [deepseek, setDeepseek] = useState<DeepSeekState>(EMPTY_DEEPSEEK);
   const [refreshTick, setRefreshTick] = useState(0);
 
   const setClaudeQuota = useQuotaStore((state) => state.setClaudeQuota);
@@ -202,6 +217,22 @@ export const useUsageDashboard = (t: TFunction): UsageDashboardState => {
 
         const zaiFiles = [zaiSource];
 
+        const refreshDeepSeekBalance = async (): Promise<void> => {
+          setDeepseek((prev) => ({ ...prev, status: 'loading', error: null }));
+          try {
+            const balance = await fetchDeepSeekBalance(t);
+            if (!isCurrent()) return;
+            setDeepseek({ status: 'success', balance, error: null });
+          } catch (err) {
+            if (!isCurrent()) return;
+            setDeepseek((prev) => ({
+              ...prev,
+              status: 'error',
+              error: err instanceof Error ? err.message : '',
+            }));
+          }
+        };
+
         await Promise.all([
           runProviderRefresh('claude', (file) =>
             refreshQuotaWithConfig({
@@ -258,6 +289,7 @@ export const useUsageDashboard = (t: TFunction): UsageDashboardState => {
             })
           ),
           runProviderRefresh('xai', refreshTokenQuota),
+          refreshDeepSeekBalance(),
           mapWithConcurrency(zaiFiles, QUOTA_REFRESH_CONCURRENCY, async (file) => {
             if (!isCurrent()) return;
             await refreshZaiQuota(file);
@@ -312,6 +344,7 @@ export const useUsageDashboard = (t: TFunction): UsageDashboardState => {
     lastRefreshedAtMs,
     zai,
     xaiRateLimits,
+    deepseek,
     quotaStates,
     refresh,
   };

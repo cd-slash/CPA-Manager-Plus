@@ -30,6 +30,7 @@ const PROVIDER_LABEL_KEYS: Record<string, string> = {
   qwen: 'provider_qwen',
   iflow: 'provider_iflow',
   vertex: 'provider_vertex',
+  deepseek: 'provider_deepseek',
 };
 
 const formatPercentValue = (value: number | null): string =>
@@ -82,6 +83,12 @@ function WindowBar({ window: usageWindow, nowMs }: WindowBarProps) {
         </span>
         {unavailable ? (
           <span className={styles.windowUnavailable}>{t('usage_dashboard.unavailable')}</span>
+        ) : usageWindow.valueNote ? (
+          // Factual value readout (e.g. DeepSeek balance vs fixed reference);
+          // replaces the percent-remaining readout for value-backed windows.
+          <span className={styles.windowValue} title={usageWindow.valueNote}>
+            {usageWindow.valueNote}
+          </span>
         ) : (
           <span className={styles.windowPercent}>
             {formatPercentValue(remainingPercent)} {t('usage_dashboard.remaining')}
@@ -95,6 +102,7 @@ function WindowBar({ window: usageWindow, nowMs }: WindowBarProps) {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={remainingPercent === null ? undefined : Math.round(remainingPercent)}
+          aria-valuetext={usageWindow.valueNote}
           aria-label={usageWindow.label}
         >
           <div className={`${styles.bar} ${barClass}`} style={{ width: `${width}%` }} />
@@ -211,8 +219,20 @@ export function UsageDashboardPage() {
           windowsByFile: dashboard.xaiRateLimits.windowsByFile,
           statusByFile: dashboard.xaiRateLimits.statusByFile,
         },
+        deepseek: {
+          status: dashboard.deepseek.status,
+          balance: dashboard.deepseek.balance,
+          error: dashboard.deepseek.error,
+        },
       }),
-    [dashboard.files, dashboard.quotaStates, dashboard.zai, dashboard.xaiRateLimits, t]
+    [
+      dashboard.files,
+      dashboard.quotaStates,
+      dashboard.zai,
+      dashboard.xaiRateLimits,
+      dashboard.deepseek,
+      t,
+    ]
   );
 
   const isEmpty = !dashboard.loading && !dashboard.error && groups.length === 0;

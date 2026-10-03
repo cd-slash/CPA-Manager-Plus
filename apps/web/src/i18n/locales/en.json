@@ -5379,6 +5379,12 @@
     "provider_qwen": "Qwen",
     "provider_iflow": "iFlow",
     "provider_vertex": "Vertex",
+    "provider_deepseek": "DeepSeek",
+    "deepseek_account": "API account",
+    "balance_available": "Available balance",
+    "balance_reference_usd": "$20 USD reference",
+    "balance_not_configured": "Not configured",
+    "balance_unavailable": "Balance unavailable",
     "unavailable": "Unavailable"
   }
 }

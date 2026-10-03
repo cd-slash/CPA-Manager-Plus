@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,16 +17,18 @@ import (
 )
 
 const (
-	zaiQuotaURL       = "https://api.z.ai/api/monitor/usage/quota/limit"
-	xaiCompletionsURL = "https://api.x.ai/v1/chat/completions"
-	maxResponseBytes  = 1 << 20
+	zaiQuotaURL        = "https://api.z.ai/api/monitor/usage/quota/limit"
+	xaiCompletionsURL  = "https://api.x.ai/v1/chat/completions"
+	deepSeekBalanceURL = "https://api.deepseek.com/user/balance"
+	maxResponseBytes   = 1 << 20
 )
 
 type Service struct {
-	managerConfig *managerconfig.Service
-	zaiAPIKey     string
-	xaiModels     []string
-	client        *http.Client
+	managerConfig  *managerconfig.Service
+	zaiAPIKey      string
+	deepSeekAPIKey string
+	xaiModels      []string
+	client         *http.Client
 }
 
 type Window struct {
@@ -46,14 +49,21 @@ type XAIResult struct {
 	Windows []Window `json:"windows"`
 }
 
-func New(managerConfig *managerconfig.Service, zaiAPIKey string, xaiModels []string) *Service {
+// DeepSeekResult carries the sanitized USD balance only. The API key and the
+// raw upstream response never leave the server.
+type DeepSeekResult struct {
+	Currency     string  `json:"currency"`
+	TotalBalance float64 `json:"totalBalance"`
+}
+
+func New(managerConfig *managerconfig.Service, zaiAPIKey string, deepSeekAPIKey string, xaiModels []string) *Service {
 	models := make([]string, 0, len(xaiModels))
 	for _, model := range xaiModels {
 		if model = strings.TrimSpace(model); model != "" {
 			models = append(models, model)
 		}
 	}
-	return &Service{managerConfig: managerConfig, zaiAPIKey: strings.TrimSpace(zaiAPIKey), xaiModels: models, client: &http.Client{Timeout: 20 * time.Second}}
+	return &Service{managerConfig: managerConfig, zaiAPIKey: strings.TrimSpace(zaiAPIKey), deepSeekAPIKey: strings.TrimSpace(deepSeekAPIKey), xaiModels: models, client: &http.Client{Timeout: 20 * time.Second}}
 }
 
 func (s *Service) ZAI(ctx context.Context) (ZAIResult, error) {
@@ -113,6 +123,62 @@ func (s *Service) ZAI(ctx context.Context) (ZAIResult, error) {
 		return ZAIResult{}, errors.New("Z.AI returned no quota windows")
 	}
 	return ZAIResult{Plan: strings.TrimSpace(envelope.Data.Level), Windows: windows}, nil
+}
+
+// ErrDeepSeekNotConfigured marks a deployment without CPA_MANAGER_DEEPSEEK_API_KEY.
+var ErrDeepSeekNotConfigured = errors.New("DeepSeek balance is not configured")
+
+// DeepSeek queries the fixed DeepSeek balance endpoint with the server-held
+// API key and returns the USD balance_infos total_balance. Errors never
+// include the key or the upstream response body.
+func (s *Service) DeepSeek(ctx context.Context) (DeepSeekResult, error) {
+	if s.deepSeekAPIKey == "" {
+		return DeepSeekResult{}, ErrDeepSeekNotConfigured
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, deepSeekBalanceURL, nil)
+	if err != nil {
+		return DeepSeekResult{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.deepSeekAPIKey)
+	res, err := s.client.Do(req)
+	if err != nil {
+		return DeepSeekResult{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return DeepSeekResult{}, fmt.Errorf("DeepSeek balance returned HTTP %d", res.StatusCode)
+	}
+	var envelope struct {
+		BalanceInfos []struct {
+			Currency     string `json:"currency"`
+			TotalBalance string `json:"total_balance"`
+		} `json:"balance_infos"`
+	}
+	if err := decodeJSON(res.Body, &envelope); err != nil {
+		return DeepSeekResult{}, errors.New("DeepSeek returned an unreadable balance response")
+	}
+	for _, info := range envelope.BalanceInfos {
+		if !strings.EqualFold(strings.TrimSpace(info.Currency), "USD") {
+			continue
+		}
+		balance, err := parseUSDBalance(info.TotalBalance)
+		if err != nil {
+			return DeepSeekResult{}, err
+		}
+		return DeepSeekResult{Currency: "USD", TotalBalance: balance}, nil
+	}
+	return DeepSeekResult{}, errors.New("DeepSeek returned no USD balance")
+}
+
+func parseUSDBalance(raw string) (float64, error) {
+	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, errors.New("DeepSeek returned an invalid USD balance")
+	}
+	if value < 0 {
+		return 0, errors.New("DeepSeek returned a negative USD balance")
+	}
+	return value, nil
 }
 
 func (s *Service) XAI(ctx context.Context, authIndex string) (XAIResult, error) {

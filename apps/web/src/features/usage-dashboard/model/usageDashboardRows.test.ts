@@ -317,4 +317,131 @@ describe('buildUsageAccountRows', () => {
     });
     expect(groups[0].accounts[0].planLabel).toBe('Pro');
   });
+
+  it('appends the DeepSeek balance row bounded against the fixed USD reference', () => {
+    const groups = buildUsageAccountRows({
+      files: [],
+      claudeQuota: {},
+      codexQuota: {},
+      antigravityQuota: {},
+      kimiQuota: {},
+      devinQuota: {},
+      metaQuota: {},
+      xaiQuota: {},
+      deepseek: {
+        status: 'success',
+        balance: { currency: 'USD', totalBalance: 12.5 },
+      },
+      t,
+      planLabel: () => null,
+    });
+    expect(groups).toHaveLength(1);
+    expect(groups[0].provider).toBe('deepseek');
+    const account = groups[0].accounts[0];
+    expect(account.status).toBe('ok');
+    expect(account.windows).toHaveLength(1);
+    const balance = account.windows[0];
+    expect(balance.key).toBe('deepseek:balance');
+    // 12.50 of the fixed $20 reference => 62.5%.
+    expect(balance.remainingPercent).toBe(62.5);
+    expect(balance.valueNote).toBe('$12.50 USD · usage_dashboard.balance_reference_usd');
+  });
+
+  it('bounds a DeepSeek balance above the reference at 100%', () => {
+    const groups = buildUsageAccountRows({
+      files: [],
+      claudeQuota: {},
+      codexQuota: {},
+      antigravityQuota: {},
+      kimiQuota: {},
+      devinQuota: {},
+      metaQuota: {},
+      xaiQuota: {},
+      deepseek: {
+        status: 'success',
+        balance: { currency: 'USD', totalBalance: 26 },
+      },
+      t,
+      planLabel: () => null,
+    });
+    expect(groups[0].accounts[0].windows[0].remainingPercent).toBe(100);
+  });
+
+  it('renders a zero DeepSeek balance as a truthful 0% row', () => {
+    const groups = buildUsageAccountRows({
+      files: [],
+      claudeQuota: {},
+      codexQuota: {},
+      antigravityQuota: {},
+      kimiQuota: {},
+      devinQuota: {},
+      metaQuota: {},
+      xaiQuota: {},
+      deepseek: {
+        status: 'success',
+        balance: { currency: 'USD', totalBalance: 0 },
+      },
+      t,
+      planLabel: () => null,
+    });
+    const account = groups[0].accounts[0];
+    expect(account.status).toBe('ok');
+    expect(account.windows[0].remainingPercent).toBe(0);
+    expect(account.windows[0].valueNote).toContain('$0.00 USD');
+  });
+
+  it('surfaces DeepSeek loading and error states without fabricating windows', () => {
+    const loading = buildUsageAccountRows({
+      files: [],
+      claudeQuota: {},
+      codexQuota: {},
+      antigravityQuota: {},
+      kimiQuota: {},
+      devinQuota: {},
+      metaQuota: {},
+      xaiQuota: {},
+      deepseek: { status: 'loading', balance: null },
+      t,
+      planLabel: () => null,
+    });
+    expect(loading[0].accounts[0].status).toBe('loading');
+    expect(loading[0].accounts[0].windows).toHaveLength(0);
+
+    const failed = buildUsageAccountRows({
+      files: [],
+      claudeQuota: {},
+      codexQuota: {},
+      antigravityQuota: {},
+      kimiQuota: {},
+      devinQuota: {},
+      metaQuota: {},
+      xaiQuota: {},
+      deepseek: {
+        status: 'error',
+        balance: null,
+        error: 'usage_dashboard.balance_not_configured',
+      },
+      t,
+      planLabel: () => null,
+    });
+    expect(failed[0].accounts[0].status).toBe('error');
+    expect(failed[0].accounts[0].statusDetail).toBe('usage_dashboard.balance_not_configured');
+    expect(failed[0].accounts[0].windows).toHaveLength(0);
+  });
+
+  it('omits the DeepSeek group when no deepseek state is provided', () => {
+    const groups = buildUsageAccountRows({
+      files: [],
+      claudeQuota: {},
+      codexQuota: {},
+      antigravityQuota: {},
+      kimiQuota: {},
+      devinQuota: {},
+      metaQuota: {},
+      xaiQuota: {},
+      t,
+      planLabel: () => null,
+    });
+    expect(groups).toHaveLength(0);
+  });
 });

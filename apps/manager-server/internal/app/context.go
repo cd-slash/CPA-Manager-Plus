@@ -196,7 +196,7 @@ func fromExisting(
 			st,
 		),
 		PanelService:             panelsvc.New(cfg.PanelPath, embeddedPanel),
-		ProviderUsageService:     providerusagesvc.New(managerConfigService, cfg.ZAIAPIKey, cfg.XAIProbeModels),
+		ProviderUsageService:     providerusagesvc.New(managerConfigService, cfg.ZAIAPIKey, cfg.DeepSeekAPIKey, cfg.XAIProbeModels),
 		AutomationRuntimeService: runtimeService,
 	}
 }
