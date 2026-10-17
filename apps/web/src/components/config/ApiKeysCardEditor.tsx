@@ -9,6 +9,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 import { maskApiKey } from '@/utils/format';
 import { sha256Hex } from '@/utils/apiKeyHash';
 import { isValidApiKeyCharset } from '@/utils/validation';
+import { MuseSubscriptionAccessPanel } from './MuseSubscriptionAccessPanel';
 import styles from './VisualConfigEditor.module.scss';
 
 export type ApiKeyMutation =
@@ -839,6 +840,14 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
       {!aliasesAvailable && !aliasesLoading ? (
         <div className="hint">{t('config_management.visual.api_keys.alias_unavailable')}</div>
       ) : null}
+
+      <MuseSubscriptionAccessPanel
+        apiKeys={apiKeys}
+        disabled={disabled}
+        onPersistApiKeyMutation={onPersistApiKeyMutation}
+        onApiKeyOperationStart={onApiKeyOperationStart}
+        onApiKeyOperationEnd={onApiKeyOperationEnd}
+      />
 
       <Modal
         open={modalOpen}
